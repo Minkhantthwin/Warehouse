@@ -10,7 +10,7 @@ function isLoggedIn() {
 
 function requireLogin() {
     if (!isLoggedIn()) {
-        header('Location: login.php');
+        header('Location: auth/login.php');
         exit();
     }
 }
@@ -53,7 +53,7 @@ function logout() {
     
     // Destroy session
     session_destroy();
-    header('Location: login.php');
+    header('Location: auth/login.php');
     exit();
 }
 

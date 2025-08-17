@@ -43,21 +43,20 @@ function getLocationStats($pdo) {
     // Active locations (all for now)
     $stats['active_locations'] = $stats['total_locations'];
     
-    // Locations with inventory
+    // Locations with borrowing requests
     $stmt = $pdo->query("
-        SELECT COUNT(DISTINCT l.id) as locations_with_inventory 
+        SELECT COUNT(DISTINCT l.id) as locations_with_requests 
         FROM Location l 
-        INNER JOIN Inventory i ON l.id = i.location_id 
-        WHERE i.quantity > 0
+        INNER JOIN Borrowing_Request br ON l.id = br.location_id
     ");
-    $stats['locations_with_inventory'] = $stmt->fetch()['locations_with_inventory'] ?? 0;
+    $stats['locations_with_requests'] = $stmt->fetch()['locations_with_requests'] ?? 0;
     
-    // Empty locations
-    $stats['empty_locations'] = $stats['total_locations'] - $stats['locations_with_inventory'];
+    // Empty locations (no borrowing requests)
+    $stats['empty_locations'] = $stats['total_locations'] - $stats['locations_with_requests'];
     
-    // Total inventory items across all locations
-    $stmt = $pdo->query("SELECT SUM(quantity) as total_inventory FROM Inventory");
-    $stats['total_inventory'] = $stmt->fetch()['total_inventory'] ?? 0;
+    // Total borrowing requests across all locations
+    $stmt = $pdo->query("SELECT COUNT(*) as total_requests FROM Borrowing_Request");
+    $stats['total_requests'] = $stmt->fetch()['total_requests'] ?? 0;
     
     return $stats;
 }
@@ -84,11 +83,10 @@ function getLocations($pdo, $page = 1, $limit = 10, $filters = []) {
     }
     
     $query = "SELECT l.*, 
-                     COUNT(DISTINCT i.material_id) as unique_materials,
-                     COALESCE(SUM(i.quantity), 0) as total_inventory,
-                     COUNT(DISTINCT br.id) as borrowing_requests
+                     COUNT(DISTINCT br.id) as borrowing_requests,
+                     COUNT(DISTINCT CASE WHEN br.status = 'active' THEN br.id END) as active_requests,
+                     COUNT(DISTINCT CASE WHEN br.status = 'pending' THEN br.id END) as pending_requests
               FROM Location l 
-              LEFT JOIN Inventory i ON l.id = i.location_id 
               LEFT JOIN Borrowing_Request br ON l.id = br.location_id
               $whereClause 
               GROUP BY l.id, l.name, l.address, l.city, l.state, l.zip_code, l.country
@@ -195,16 +193,16 @@ $filterOptions = getLocationFilters($pdo);
                 <div class="bg-white rounded-lg shadow-md p-6">
                     <div class="flex items-center">
                         <div class="p-3 rounded-full bg-green-100 text-green-600">
-                            <i class="fas fa-boxes text-2xl"></i>
+                            <i class="fas fa-clipboard-list text-2xl"></i>
                         </div>
                         <div class="ml-4">
-                            <p class="text-sm font-medium text-gray-600">With Inventory</p>
-                            <p class="text-2xl font-semibold text-gray-900"><?php echo number_format($stats['locations_with_inventory']); ?></p>
+                            <p class="text-sm font-medium text-gray-600">With Requests</p>
+                            <p class="text-2xl font-semibold text-gray-900"><?php echo number_format($stats['locations_with_requests']); ?></p>
                         </div>
                     </div>
                     <div class="mt-4">
                         <span class="text-green-600 text-sm font-medium">
-                            <i class="fas fa-check-circle"></i> Active Storage
+                            <i class="fas fa-check-circle"></i> Active Use
                         </span>
                     </div>
                 </div>
@@ -221,7 +219,7 @@ $filterOptions = getLocationFilters($pdo);
                     </div>
                     <div class="mt-4">
                         <span class="text-yellow-600 text-sm font-medium">
-                            <i class="fas fa-warehouse"></i> No Inventory
+                            <i class="fas fa-warehouse"></i> No Requests
                         </span>
                     </div>
                 </div>
@@ -229,16 +227,16 @@ $filterOptions = getLocationFilters($pdo);
                 <div class="bg-white rounded-lg shadow-md p-6">
                     <div class="flex items-center">
                         <div class="p-3 rounded-full bg-purple-100 text-purple-600">
-                            <i class="fas fa-cubes text-2xl"></i>
+                            <i class="fas fa-clipboard-list text-2xl"></i>
                         </div>
                         <div class="ml-4">
-                            <p class="text-sm font-medium text-gray-600">Total Inventory</p>
-                            <p class="text-2xl font-semibold text-gray-900"><?php echo number_format($stats['total_inventory']); ?></p>
+                            <p class="text-sm font-medium text-gray-600">Total Requests</p>
+                            <p class="text-2xl font-semibold text-gray-900"><?php echo number_format($stats['total_requests']); ?></p>
                         </div>
                     </div>
                     <div class="mt-4">
                         <span class="text-purple-600 text-sm font-medium">
-                            <i class="fas fa-layer-group"></i> All Items
+                            <i class="fas fa-layer-group"></i> All Requests
                         </span>
                     </div>
                 </div>
@@ -306,7 +304,6 @@ $filterOptions = getLocationFilters($pdo);
                                 <option value="">Bulk Actions</option>
                                 <option value="delete">Delete Selected</option>
                                 <option value="export">Export Selected</option>
-                                <option value="assign_materials">Assign Materials</option>
                             </select>
                         </div>
                         <span class="text-sm text-gray-500"><?php echo count($locations); ?> locations</span>
@@ -322,7 +319,7 @@ $filterOptions = getLocationFilters($pdo);
                                 </th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Address</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Inventory</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Requests</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                             </tr>
@@ -376,15 +373,15 @@ $filterOptions = getLocationFilters($pdo);
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <div class="flex flex-col">
                                             <div class="text-sm font-medium text-gray-900">
-                                                <?php echo number_format($location['total_inventory']); ?> items
+                                                <?php echo number_format($location['borrowing_requests']); ?> total
                                             </div>
                                             <div class="text-sm text-gray-500">
-                                                <?php echo $location['unique_materials']; ?> materials
+                                                <?php echo $location['active_requests']; ?> active, <?php echo $location['pending_requests']; ?> pending
                                             </div>
                                         </div>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap">
-                                        <?php if ($location['total_inventory'] > 0): ?>
+                                        <?php if ($location['borrowing_requests'] > 0): ?>
                                             <span class="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
                                                 <i class="fas fa-check-circle mr-1"></i>
                                                 Active
@@ -404,15 +401,15 @@ $filterOptions = getLocationFilters($pdo);
                                             <button onclick="editLocation(<?php echo $location['id']; ?>)" class="text-green-600 hover:text-green-900" title="Edit">
                                                 <i class="fas fa-edit"></i>
                                             </button>
-                                            <button onclick="viewInventory(<?php echo $location['id']; ?>)" class="text-purple-600 hover:text-purple-900" title="View Inventory">
-                                                <i class="fas fa-boxes"></i>
+                                            <button onclick="viewRequests(<?php echo $location['id']; ?>)" class="text-purple-600 hover:text-purple-900" title="View Requests">
+                                                <i class="fas fa-clipboard-list"></i>
                                             </button>
-                                            <?php if ($location['total_inventory'] == 0 && $location['borrowing_requests'] == 0): ?>
+                                            <?php if ($location['borrowing_requests'] == 0): ?>
                                             <button onclick="deleteLocation(<?php echo $location['id']; ?>)" class="text-red-600 hover:text-red-900" title="Delete">
                                                 <i class="fas fa-trash"></i>
                                             </button>
                                             <?php else: ?>
-                                            <button onclick="showCannotDelete()" class="text-gray-400 cursor-not-allowed" title="Cannot delete - has inventory or requests">
+                                            <button onclick="showCannotDelete()" class="text-gray-400 cursor-not-allowed" title="Cannot delete - has active requests">
                                                 <i class="fas fa-trash"></i>
                                             </button>
                                             <?php endif; ?>
@@ -657,35 +654,36 @@ $filterOptions = getLocationFilters($pdo);
                             </div>
                             
                             <div>
-                                <h4 class="text-md font-semibold text-gray-700 mb-3">Inventory Summary</h4>
+                                <h4 class="text-md font-semibold text-gray-700 mb-3">Request Summary</h4>
                                 <div class="space-y-2">
-                                    <p><strong>Total Items:</strong> ${parseInt(location.total_inventory).toLocaleString()}</p>
-                                    <p><strong>Unique Materials:</strong> ${location.unique_materials}</p>
-                                    <p><strong>Materials with Stock:</strong> ${location.materials_with_stock}</p>
-                                    <p><strong>Borrowing Requests:</strong> ${location.borrowing_requests}</p>
-                                    <p><strong>Transactions:</strong> ${location.transactions}</p>
+                                    <p><strong>Total Requests:</strong> ${parseInt(location.borrowing_requests).toLocaleString()}</p>
+                                    <p><strong>Active Requests:</strong> ${location.active_requests}</p>
+                                    <p><strong>Pending Requests:</strong> ${location.pending_requests}</p>
+                                    <p><strong>Completed Requests:</strong> ${location.completed_requests || 0}</p>
                                 </div>
                             </div>
                         </div>
                         
-                        ${location.recent_inventory && location.recent_inventory.length > 0 ? `
+                        ${location.recent_requests && location.recent_requests.length > 0 ? `
                         <div class="mt-6">
-                            <h4 class="text-md font-semibold text-gray-700 mb-3">Recent Inventory</h4>
+                            <h4 class="text-md font-semibold text-gray-700 mb-3">Recent Requests</h4>
                             <div class="overflow-x-auto">
                                 <table class="min-w-full divide-y divide-gray-200">
                                     <thead class="bg-gray-50">
                                         <tr>
-                                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Material</th>
-                                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Quantity</th>
-                                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Last Updated</th>
+                                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Customer</th>
+                                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Request Date</th>
                                         </tr>
                                     </thead>
                                     <tbody class="bg-white divide-y divide-gray-200">
-                                        ${location.recent_inventory.map(item => `
+                                        ${location.recent_requests.map(request => `
                                             <tr>
-                                                <td class="px-4 py-2 text-sm text-gray-900">${item.name}</td>
-                                                <td class="px-4 py-2 text-sm text-gray-900">${item.quantity} ${item.unit || ''}</td>
-                                                <td class="px-4 py-2 text-sm text-gray-500">${new Date(item.last_updated).toLocaleDateString()}</td>
+                                                <td class="px-4 py-2 text-sm text-gray-900">${request.customer_name}</td>
+                                                <td class="px-4 py-2 text-sm text-gray-900">
+                                                    <span class="px-2 py-1 text-xs rounded-full ${request.status === 'active' ? 'bg-green-100 text-green-800' : request.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'}">${request.status}</span>
+                                                </td>
+                                                <td class="px-4 py-2 text-sm text-gray-500">${new Date(request.request_date).toLocaleDateString()}</td>
                                             </tr>
                                         `).join('')}
                                     </tbody>
@@ -733,9 +731,9 @@ $filterOptions = getLocationFilters($pdo);
             }
         }
 
-        async function viewInventory(id) {
-            // Redirect to inventory page with location filter
-            window.location.href = `../inventory/materials.php?location=${id}`;
+        async function viewRequests(id) {
+            // Redirect to borrowing requests page with location filter
+            window.location.href = `../borrowing-requests.php?location=${id}`;
         }
 
         async function deleteLocation(id) {

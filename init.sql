@@ -156,6 +156,16 @@ CREATE TABLE Damage_Report (
     FOREIGN KEY (reported_by) REFERENCES Employee(id)
 );
 
+-- Activity Log table for tracking admin actions
+CREATE TABLE Activity_Log (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    admin_id INT,
+    action ENUM('CREATE', 'UPDATE', 'DELETE', 'BULK_UPDATE', 'APPROVE', 'REJECT') NOT NULL,
+    description TEXT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (admin_id) REFERENCES Admin(id)
+);
+
 -- Additional columns for Customer table to support the management interface
 ALTER TABLE Customer ADD COLUMN customer_type ENUM('retail', 'wholesale', 'corporate', 'government') DEFAULT 'retail';
 ALTER TABLE Customer ADD COLUMN location_type ENUM('local', 'regional', 'national', 'international') DEFAULT 'local';
@@ -266,6 +276,49 @@ INSERT IGNORE INTO Inventory (material_id, quantity, location_id, last_updated) 
 -- Insert a default location if it doesn't exist
 INSERT IGNORE INTO Location (id, name, address, city, state, zip_code, country) VALUES
 (1, 'Main Warehouse', '123 Industrial Blvd', 'Industrial City', 'State', '12345', 'USA');
+
+-- Add sample borrowing requests for testing
+INSERT IGNORE INTO Borrowing_Request (id, customer_id, employee_id, location_id, request_date, required_date, purpose, status, approved_by, approved_date, notes) VALUES
+(1, 1, 1, 1, '2024-01-10 09:00:00', '2024-01-20 17:00:00', 'Construction project materials needed for building renovation', 'active', 1, '2024-01-10 10:30:00', 'Approved for full quantities requested'),
+(2, 2, 2, 1, '2024-01-12 14:30:00', '2024-01-25 16:00:00', 'Maintenance work on industrial equipment', 'pending', NULL, NULL, 'Waiting for inventory verification'),
+(3, 3, 3, 1, '2024-01-15 11:15:00', '2024-01-18 09:00:00', 'Emergency repair work needed urgently', 'approved', 2, '2024-01-15 12:00:00', 'Rush order approved'),
+(4, 4, 1, 1, '2024-01-08 16:45:00', '2024-01-15 12:00:00', 'Government facility upgrade project', 'overdue', 1, '2024-01-09 08:30:00', 'Materials not returned on time'),
+(5, 1, 4, 1, '2024-01-14 10:20:00', '2024-01-28 15:00:00', 'Quality control testing equipment', 'rejected', 3, '2024-01-14 15:45:00', 'Insufficient justification for request');
+
+-- Add sample borrowing items
+INSERT IGNORE INTO Borrowing_Items (borrowing_request_id, material_id, quantity_requested, quantity_approved, quantity_borrowed, unit_price) VALUES
+-- Request 1 items
+(1, 1, 10, 10, 10, 25.50),
+(1, 2, 500, 500, 500, 2.25),
+(1, 6, 20, 20, 20, 12.99),
+-- Request 2 items
+(2, 3, 2, NULL, NULL, 189.99),
+(2, 10, 1, NULL, NULL, 89.99),
+(2, 11, 5, NULL, NULL, 15.75),
+-- Request 3 items
+(3, 13, 1, 1, 1, 125.00),
+(3, 14, 100, 100, 100, 0.85),
+(3, 15, 2, 2, 2, 67.99),
+-- Request 4 items
+(4, 9, 2, 2, 2, 145.00),
+(4, 7, 5, 5, 5, 18.50),
+-- Request 5 items
+(5, 4, 10, NULL, NULL, 45.00),
+(5, 11, 15, NULL, NULL, 15.75);
+
+-- Add sample transactions
+INSERT IGNORE INTO Borrowing_Transaction (borrowing_request_id, transaction_type, transaction_date, processed_by, notes) VALUES
+(1, 'borrow', '2024-01-10 11:00:00', 1, 'Materials issued for construction project'),
+(3, 'borrow', '2024-01-15 13:30:00', 2, 'Emergency materials issued'),
+(4, 'borrow', '2024-01-09 09:15:00', 1, 'Government project materials issued');
+
+-- Add sample return items
+INSERT IGNORE INTO Return_Items (borrowing_transaction_id, material_id, quantity_returned, condition_status, damage_notes, return_date) VALUES
+-- Some returns for request 3 (partial return)
+(2, 13, 1, 'good', NULL, '2024-01-18 16:00:00'),
+(2, 14, 95, 'good', NULL, '2024-01-18 16:00:00'),
+(2, 14, 5, 'damaged', 'Screws bent during installation', '2024-01-18 16:00:00'),
+(2, 15, 2, 'good', NULL, '2024-01-18 16:00:00');
 
 -- Create Activity Log table for tracking admin actions
 ALTER TABLE Material ADD COLUMN IF NOT EXISTS status ENUM('active', 'inactive') DEFAULT 'active';

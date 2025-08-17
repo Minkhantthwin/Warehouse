@@ -126,7 +126,7 @@ The system is built around the following main entities:
 
 4. **Access the dashboard**
    ```
-   http://localhost/Warehouse/index.html
+   http://localhost/Warehouse/index.php
    ```
 
 ## 📱 Key Features in Detail

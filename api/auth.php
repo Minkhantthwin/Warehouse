@@ -146,8 +146,8 @@ function registerAdmin() {
     try {
         // Set default permissions based on role
         $defaultPermissions = [
-            'admin' => ['inventory_management', 'customer_management', 'employee_management'],
-            'super-admin' => ['user_management', 'inventory_management', 'customer_management', 'employee_management', 'system_settings', 'reports']
+            'admin' => ['borrowing_management', 'customer_management', 'employee_management'],
+            'super-admin' => ['user_management', 'borrowing_management', 'customer_management', 'employee_management', 'system_settings', 'reports']
         ];
         
         $permissions = $defaultPermissions[$input['role']] ?? $defaultPermissions['admin'];

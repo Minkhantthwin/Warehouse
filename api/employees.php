@@ -1,53 +1,58 @@
 <?php
-require_once '../includes/config.php';
-require_once '../includes/auth.php';
+header('Content-Type: application/json');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
 
-session_start();
-
-// Require login
-if (!isLoggedIn()) {
-    http_response_code(401);
-    echo json_encode(['error' => 'Authentication required']);
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
     exit();
 }
 
-header('Content-Type: application/json');
+require_once '../includes/config.php';
+require_once '../includes/auth.php';
 
-$method = $_SERVER['REQUEST_METHOD'];
-$action = $_GET['action'] ?? '';
+// Check remember me token
+checkRememberMe();
+
+// Require login
+requireLogin();
+
+$currentAdmin = getLoggedInAdmin();
+$action = $_GET['action'] ?? $_POST['action'] ?? '';
 
 try {
-    switch ($method) {
-        case 'GET':
-            if ($action === 'list') {
-                getEmployees();
-            } elseif ($action === 'get' && isset($_GET['id'])) {
-                getEmployee($_GET['id']);
-            } elseif ($action === 'stats') {
-                getEmployeeStats();
-            }
+    switch ($action) {
+        case 'list':
+            getEmployees();
             break;
-            
-        case 'POST':
-            if ($action === 'create') {
-                createEmployee();
-            } elseif ($action === 'update') {
-                updateEmployee();
-            } elseif ($action === 'delete') {
-                deleteEmployee();
-            } elseif ($action === 'bulk') {
-                bulkActions();
-            }
+        case 'get':
+            getEmployee($_GET['id']);
             break;
-            
+        case 'stats':
+            getEmployeeStats();
+            break;
+        case 'create':
+            createEmployee();
+            break;
+        case 'update':
+            updateEmployee();
+            break;
+        case 'delete':
+            deleteEmployee();
+            break;
+        case 'bulk':
+            bulkActions();
+            break;
         default:
             http_response_code(405);
-            echo json_encode(['error' => 'Method not allowed']);
+            echo json_encode(['success' => false, 'error' => 'Invalid action']);
             break;
     }
 } catch (Exception $e) {
+    error_log("Employees API Error: " . $e->getMessage());
     http_response_code(500);
-    echo json_encode(['error' => $e->getMessage()]);
+    echo json_encode(['success' => false, 'error' => 'Internal server error occurred']);
 }
 
 function getEmployees() {
@@ -58,6 +63,7 @@ function getEmployees() {
     $department = $_GET['department'] ?? '';
     $position = $_GET['position'] ?? '';
     $status = $_GET['status'] ?? '';
+    $active_only = $_GET['active_only'] ?? false;
     $page = (int)($_GET['page'] ?? 1);
     $limit = (int)($_GET['limit'] ?? 10);
     $offset = ($page - 1) * $limit;
@@ -84,6 +90,10 @@ function getEmployees() {
     if ($status) {
         $whereClause .= " AND e.status = :status";
         $params['status'] = $status;
+    }
+    
+    if ($active_only) {
+        $whereClause .= " AND e.status = 'active'";
     }
     
     // Get total count

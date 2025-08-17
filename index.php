@@ -90,11 +90,11 @@ $currentAdmin = getLoggedInAdmin();
                     <div class="bg-white rounded-lg shadow-md p-6">
                         <div class="flex items-center">
                             <div class="p-3 rounded-full bg-purple-100 text-purple-600">
-                                <i class="fas fa-boxes text-2xl"></i>
+                                <i class="fas fa-users text-2xl"></i>
                             </div>
                             <div class="ml-4">
-                                <h2 class="text-sm font-medium text-gray-600">Total Materials</h2>
-                                <p class="text-2xl font-semibold text-gray-900">1,247</p>
+                                <h2 class="text-sm font-medium text-gray-600">Total Customers</h2>
+                                <p class="text-2xl font-semibold text-gray-900">87</p>
                             </div>
                         </div>
                     </div>
@@ -241,31 +241,10 @@ $currentAdmin = getLoggedInAdmin();
                 </div>
             </div>
 
-            <div id="materials-section" class="section hidden">
-                <div class="bg-white rounded-lg shadow-md p-6">
-                    <h2 class="text-2xl font-bold text-gray-800 mb-4">Material Management</h2>
-                    <p class="text-gray-600">Material management interface will be implemented here.</p>
-                </div>
-            </div>
-
-            <div id="categories-section" class="section hidden">
-                <div class="bg-white rounded-lg shadow-md p-6">
-                    <h2 class="text-2xl font-bold text-gray-800 mb-4">Category Management</h2>
-                    <p class="text-gray-600">Category management interface will be implemented here.</p>
-                </div>
-            </div>
-
             <div id="locations-section" class="section hidden">
                 <div class="bg-white rounded-lg shadow-md p-6">
                     <h2 class="text-2xl font-bold text-gray-800 mb-4">Location Management</h2>
                     <p class="text-gray-600">Location management interface will be implemented here.</p>
-                </div>
-            </div>
-
-            <div id="inventory-section" class="section hidden">
-                <div class="bg-white rounded-lg shadow-md p-6">
-                    <h2 class="text-2xl font-bold text-gray-800 mb-4">Inventory Management</h2>
-                    <p class="text-gray-600">Inventory management interface will be implemented here.</p>
                 </div>
             </div>
 

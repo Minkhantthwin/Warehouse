@@ -60,9 +60,6 @@ try {
         case 'check_usage':
             handleCheckUsage();
             break;
-        case 'assign_materials':
-            handleAssignMaterials();
-            break;
         default:
             http_response_code(400);
             echo json_encode(['success' => false, 'error' => 'Invalid action specified']);
@@ -84,12 +81,12 @@ function handleListLocations() {
     $search = $_GET['search'] ?? '';
     $country = $_GET['country'] ?? '';
     $state = $_GET['state'] ?? '';
-    $has_inventory = $_GET['has_inventory'] ?? '';
+    $has_requests = $_GET['has_requests'] ?? '';
     $sort_by = $_GET['sort_by'] ?? 'name';
     $sort_order = $_GET['sort_order'] ?? 'ASC';
     
     // Validate sort parameters
-    $validSortColumns = ['name', 'city', 'state', 'country', 'total_inventory', 'created_at'];
+    $validSortColumns = ['name', 'city', 'state', 'country', 'borrowing_requests', 'created_at'];
     $validSortOrders = ['ASC', 'DESC'];
     
     if (!in_array($sort_by, $validSortColumns)) {
@@ -126,31 +123,29 @@ function handleListLocations() {
     $countStmt->execute();
     $totalItems = $countStmt->fetch()['total'];
     
-    // Get locations with inventory and usage info
+    // Get locations with borrowing request info
     $query = "SELECT l.*, 
-                     COUNT(DISTINCT i.material_id) as unique_materials,
-                     COALESCE(SUM(i.quantity), 0) as total_inventory,
                      COUNT(DISTINCT br.id) as borrowing_requests,
-                     COUNT(DISTINCT bt.id) as transactions,
-                     COALESCE(SUM(CASE WHEN i.quantity > 0 THEN 1 ELSE 0 END), 0) as materials_with_stock
+                     COUNT(DISTINCT CASE WHEN br.status = 'active' THEN br.id END) as active_requests,
+                     COUNT(DISTINCT CASE WHEN br.status = 'pending' THEN br.id END) as pending_requests,
+                     COUNT(DISTINCT bt.id) as transactions
               FROM Location l 
-              LEFT JOIN Inventory i ON l.id = i.location_id 
               LEFT JOIN Borrowing_Request br ON l.id = br.location_id
               LEFT JOIN Borrowing_Transaction bt ON br.id = bt.borrowing_request_id
               $whereClause";
     
-    // Apply has_inventory filter
-    if ($has_inventory === 'true') {
-        $query .= " HAVING total_inventory > 0";
-    } elseif ($has_inventory === 'false') {
-        $query .= " HAVING total_inventory = 0";
+    // Apply has_requests filter
+    if ($has_requests === 'true') {
+        $query .= " HAVING borrowing_requests > 0";
+    } elseif ($has_requests === 'false') {
+        $query .= " HAVING borrowing_requests = 0";
     }
     
     $query .= " GROUP BY l.id, l.name, l.address, l.city, l.state, l.zip_code, l.country";
     
     // Apply sorting
-    if ($sort_by === 'total_inventory') {
-        $query .= " ORDER BY total_inventory $sort_order";
+    if ($sort_by === 'borrowing_requests') {
+        $query .= " ORDER BY borrowing_requests $sort_order";
     } else {
         $query .= " ORDER BY l.$sort_by $sort_order";
     }
@@ -197,13 +192,12 @@ function handleGetLocation() {
     }
     
     $query = "SELECT l.*, 
-                     COUNT(DISTINCT i.material_id) as unique_materials,
-                     COALESCE(SUM(i.quantity), 0) as total_inventory,
                      COUNT(DISTINCT br.id) as borrowing_requests,
-                     COUNT(DISTINCT bt.id) as transactions,
-                     COALESCE(SUM(CASE WHEN i.quantity > 0 THEN 1 ELSE 0 END), 0) as materials_with_stock
+                     COUNT(DISTINCT CASE WHEN br.status = 'active' THEN br.id END) as active_requests,
+                     COUNT(DISTINCT CASE WHEN br.status = 'pending' THEN br.id END) as pending_requests,
+                     COUNT(DISTINCT CASE WHEN br.status = 'returned' THEN br.id END) as completed_requests,
+                     COUNT(DISTINCT bt.id) as transactions
               FROM Location l 
-              LEFT JOIN Inventory i ON l.id = i.location_id 
               LEFT JOIN Borrowing_Request br ON l.id = br.location_id
               LEFT JOIN Borrowing_Transaction bt ON br.id = bt.borrowing_request_id
               WHERE l.id = :id
@@ -221,22 +215,6 @@ function handleGetLocation() {
         return;
     }
     
-    // Get recent inventory items in this location
-    $inventoryQuery = "SELECT m.id, m.name, mc.name as category_name, i.quantity, m.unit,
-                              m.price_per_unit, i.last_updated
-                       FROM Inventory i 
-                       INNER JOIN Material m ON i.material_id = m.id
-                       LEFT JOIN Material_Categories mc ON m.category_id = mc.id
-                       WHERE i.location_id = :id AND i.quantity > 0
-                       ORDER BY i.last_updated DESC 
-                       LIMIT 10";
-    
-    $inventoryStmt = $pdo->prepare($inventoryQuery);
-    $inventoryStmt->bindValue(':id', $id, PDO::PARAM_INT);
-    $inventoryStmt->execute();
-    
-    $location['recent_inventory'] = $inventoryStmt->fetchAll(PDO::FETCH_ASSOC);
-    
     // Get recent borrowing requests for this location
     $requestsQuery = "SELECT br.id, br.request_date, br.status, br.purpose,
                              c.name as customer_name, e.name as employee_name
@@ -244,8 +222,8 @@ function handleGetLocation() {
                       LEFT JOIN Customer c ON br.customer_id = c.id
                       LEFT JOIN Employee e ON br.employee_id = e.id
                       WHERE br.location_id = :id
-                      ORDER BY br.request_date DESC
-                      LIMIT 5";
+                      ORDER BY br.request_date DESC 
+                      LIMIT 10";
     
     $requestsStmt = $pdo->prepare($requestsQuery);
     $requestsStmt->bindValue(':id', $id, PDO::PARAM_INT);
@@ -913,91 +891,6 @@ function handleCheckUsage() {
         error_log("Error checking location usage: " . $e->getMessage());
         http_response_code(500);
         echo json_encode(['success' => false, 'error' => 'Failed to check location usage']);
-    }
-}
-
-function handleAssignMaterials() {
-    global $pdo, $currentAdmin;
-    
-    $input = json_decode(file_get_contents('php://input'), true);
-    
-    $locationId = $input['location_id'] ?? null;
-    $materialAssignments = $input['material_assignments'] ?? [];
-    
-    if (!$locationId || empty($materialAssignments)) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Location ID and material assignments are required']);
-        return;
-    }
-    
-    try {
-        $pdo->beginTransaction();
-        
-        $assignedCount = 0;
-        $errors = [];
-        
-        foreach ($materialAssignments as $assignment) {
-            $materialId = $assignment['material_id'] ?? null;
-            $quantity = $assignment['quantity'] ?? 0;
-            
-            if (!$materialId || $quantity <= 0) {
-                $errors[] = "Invalid material assignment: material_id=$materialId, quantity=$quantity";
-                continue;
-            }
-            
-            // Check if inventory record exists
-            $checkQuery = "SELECT id, quantity FROM Inventory WHERE material_id = :material_id AND location_id = :location_id";
-            $checkStmt = $pdo->prepare($checkQuery);
-            $checkStmt->bindValue(':material_id', $materialId, PDO::PARAM_INT);
-            $checkStmt->bindValue(':location_id', $locationId, PDO::PARAM_INT);
-            $checkStmt->execute();
-            
-            $existingRecord = $checkStmt->fetch();
-            
-            if ($existingRecord) {
-                // Update existing record
-                $updateQuery = "UPDATE Inventory SET quantity = quantity + :quantity, last_updated = NOW() 
-                                WHERE id = :id";
-                $updateStmt = $pdo->prepare($updateQuery);
-                $updateStmt->bindValue(':quantity', $quantity, PDO::PARAM_INT);
-                $updateStmt->bindValue(':id', $existingRecord['id'], PDO::PARAM_INT);
-                $updateStmt->execute();
-            } else {
-                // Create new record
-                $insertQuery = "INSERT INTO Inventory (material_id, location_id, quantity, last_updated) 
-                                VALUES (:material_id, :location_id, :quantity, NOW())";
-                $insertStmt = $pdo->prepare($insertQuery);
-                $insertStmt->bindValue(':material_id', $materialId, PDO::PARAM_INT);
-                $insertStmt->bindValue(':location_id', $locationId, PDO::PARAM_INT);
-                $insertStmt->bindValue(':quantity', $quantity, PDO::PARAM_INT);
-                $insertStmt->execute();
-            }
-            
-            $assignedCount++;
-        }
-        
-        // Log the activity
-        $logQuery = "INSERT INTO Activity_Log (admin_id, action, description, timestamp) 
-                     VALUES (:admin_id, 'UPDATE', :description, NOW())";
-        $logStmt = $pdo->prepare($logQuery);
-        $logStmt->bindValue(':admin_id', $currentAdmin['id']);
-        $logStmt->bindValue(':description', "Assigned $assignedCount materials to location ID: $locationId");
-        $logStmt->execute();
-        
-        $pdo->commit();
-        
-        echo json_encode([
-            'success' => true,
-            'message' => "$assignedCount materials assigned successfully",
-            'assigned_count' => $assignedCount,
-            'errors' => $errors
-        ]);
-        
-    } catch (Exception $e) {
-        $pdo->rollBack();
-        error_log("Error assigning materials: " . $e->getMessage());
-        http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'Failed to assign materials']);
     }
 }
 ?>

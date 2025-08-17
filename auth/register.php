@@ -287,14 +287,14 @@ redirectIfLoggedIn();
         // Role permissions mapping
         const rolePermissions = {
             'admin': [
-                'Inventory Management',
+                'Borrowing Management',
                 'Customer Management',
                 'Employee Management',
                 'View Reports'
             ],
             'super-admin': [
                 'User Management',
-                'Inventory Management', 
+                'Borrowing Management', 
                 'Customer Management',
                 'Employee Management',
                 'System Settings',
@@ -425,7 +425,7 @@ redirectIfLoggedIn();
             document.getElementById('loading-overlay').classList.remove('hidden');
             
             try {
-                const response = await fetch('api/auth.php?action=register', {
+                const response = await fetch('../api/auth.php?action=register', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
