@@ -341,9 +341,9 @@ $employees = getEmployees($pdo, $page, $limit, $filters);
                                             'warehouse' => 'bg-blue-100 text-blue-800',
                                             'inventory' => 'bg-green-100 text-green-800',
                                             'logistics' => 'bg-yellow-100 text-yellow-800',
-                                            'quality-control' => 'bg-red-100 text-red-800',
-                                            'administration' => 'bg-purple-100 text-purple-800',
-                                            'security' => 'bg-gray-100 text-gray-800'
+                                            'quality' => 'bg-red-100 text-red-800',
+                                            'maintenance' => 'bg-orange-100 text-orange-800',
+                                            'administration' => 'bg-purple-100 text-purple-800'
                                         ];
                                         $colorClass = $departmentColors[$employee['department']] ?? 'bg-gray-100 text-gray-800';
                                         ?>
@@ -507,9 +507,9 @@ $employees = getEmployees($pdo, $page, $limit, $filters);
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-2">Shift</label>
                         <select name="shift" class="form-select">
-                            <option value="day">Day Shift (8AM - 4PM)</option>
-                            <option value="evening">Evening Shift (4PM - 12AM)</option>
-                            <option value="night">Night Shift (12AM - 8AM)</option>
+                            <option value="day">Day</option>
+                            <option value="night">Night</option>
+                            <option value="rotating">Rotating</option>
                         </select>
                     </div>
                     
@@ -554,7 +554,504 @@ $employees = getEmployees($pdo, $page, $limit, $filters);
         </div>
     </div>
 
+    <!-- Edit Employee Modal -->
+    <div id="edit-employee-modal" class="modal hidden">
+        <div class="modal-overlay" onclick="closeModal('edit-employee-modal')"></div>
+        <div class="modal-content max-w-3xl">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-xl font-semibold">Edit Employee</h2>
+                <button onclick="closeModal('edit-employee-modal')" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            
+            <form id="edit-employee-form">
+                <input type="hidden" name="id" id="edit-employee-id">
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Employee ID</label>
+                        <input type="text" name="employee_id" id="edit-employee-display-id" class="form-input bg-gray-100" readonly>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Full Name *</label>
+                        <input type="text" name="name" id="edit-name" class="form-input" required>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Email Address *</label>
+                        <input type="email" name="email" id="edit-email" class="form-input" required>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Phone Number *</label>
+                        <input type="tel" name="phone" id="edit-phone" class="form-input" required>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Department *</label>
+                        <select name="department" id="edit-department" class="form-select" required>
+                            <option value="">Select Department</option>
+                            <option value="warehouse">Warehouse Operations</option>
+                            <option value="logistics">Logistics & Shipping</option>
+                            <option value="inventory">Inventory Management</option>
+                            <option value="quality">Quality Control</option>
+                            <option value="maintenance">Maintenance</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Position *</label>
+                        <input type="text" name="position" id="edit-position" class="form-input" required>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Hire Date *</label>
+                        <input type="date" name="hire_date" id="edit-hire-date" class="form-input" required>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Salary</label>
+                        <input type="number" name="salary" id="edit-salary" class="form-input" step="0.01">
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Work Shift</label>
+                        <select name="shift" id="edit-shift" class="form-select">
+                            <option value="day">Day Shift</option>
+                            <option value="night">Night Shift</option>
+                            <option value="rotating">Rotating Shifts</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                        <select name="status" id="edit-status" class="form-select">
+                            <option value="active">Active</option>
+                            <option value="inactive">Inactive</option>
+                            <option value="on-leave">On Leave</option>
+                            <option value="terminated">Terminated</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Address</label>
+                    <textarea name="address" id="edit-address" rows="3" class="form-textarea"></textarea>
+                </div>
+                
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Emergency Contact</label>
+                    <input type="text" name="emergency_contact" id="edit-emergency-contact" class="form-input">
+                </div>
+                
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Access Permissions</label>
+                    <div class="grid grid-cols-2 gap-3">
+                        <label class="flex items-center">
+                            <input type="checkbox" name="permissions[]" value="inventory_view" class="rounded border-gray-300 mr-2">
+                            <span class="text-sm">Inventory View</span>
+                        </label>
+                        <label class="flex items-center">
+                            <input type="checkbox" name="permissions[]" value="borrowing_requests" class="rounded border-gray-300 mr-2">
+                            <span class="text-sm">Borrowing Requests</span>
+                        </label>
+                        <label class="flex items-center">
+                            <input type="checkbox" name="permissions[]" value="material_handling" class="rounded border-gray-300 mr-2">
+                            <span class="text-sm">Material Handling</span>
+                        </label>
+                        <label class="flex items-center">
+                            <input type="checkbox" name="permissions[]" value="reporting" class="rounded border-gray-300 mr-2">
+                            <span class="text-sm">Basic Reporting</span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="flex justify-end space-x-3">
+                    <button type="button" onclick="closeModal('edit-employee-modal')" class="btn btn-secondary">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Update Employee</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script src="../js/dashboard.js"></script>
-    <script src="../js/employee-management.js"></script>
+    <script>
+        // PHP backend integration
+        const API_BASE = '../api/employees.php';
+        
+        // Handle form submission
+        document.getElementById('add-employee-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const data = Object.fromEntries(formData.entries());
+            
+            // Collect permissions
+            const permissions = Array.from(formData.getAll('permissions[]'));
+            data.permissions = permissions;
+            
+            try {
+                const response = await fetch(`${API_BASE}?action=create`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showNotification('Employee added successfully!', 'success');
+                    closeModal('add-employee-modal');
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1000);
+                } else {
+                    showNotification(result.error || 'Failed to add employee', 'error');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showNotification('Error adding employee', 'error');
+            }
+        });
+        
+        // Handle edit form submission
+        document.getElementById('edit-employee-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const data = Object.fromEntries(formData.entries());
+            
+            // Collect permissions
+            const permissions = Array.from(formData.getAll('permissions[]'));
+            data.permissions = permissions;
+            
+            try {
+                const response = await fetch(`${API_BASE}?action=update`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showNotification('Employee updated successfully!', 'success');
+                    closeModal('edit-employee-modal');
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1000);
+                } else {
+                    showNotification(result.error || 'Failed to update employee', 'error');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showNotification('Error updating employee', 'error');
+            }
+        });
+        
+        // Populate edit form with employee data
+        function populateEditForm(employee) {
+            console.log('populateEditForm called with:', employee); // Debug log
+            
+            if (!employee) {
+                showNotification('Employee data is missing', 'error');
+                return;
+            }
+            
+            // Safely populate form fields with null checks
+            const setFieldValue = (id, value) => {
+                const field = document.getElementById(id);
+                if (field) {
+                    field.value = value || '';
+                }
+            };
+            
+            setFieldValue('edit-employee-id', employee.id);
+            setFieldValue('edit-employee-display-id', employee.employee_id);
+            setFieldValue('edit-name', employee.name);
+            setFieldValue('edit-email', employee.email);
+            setFieldValue('edit-phone', employee.phone);
+            setFieldValue('edit-department', employee.department);
+            setFieldValue('edit-position', employee.position);
+            setFieldValue('edit-hire-date', employee.hire_date);
+            setFieldValue('edit-salary', employee.salary);
+            setFieldValue('edit-shift', employee.shift);
+            setFieldValue('edit-status', employee.status);
+            setFieldValue('edit-address', employee.address);
+            setFieldValue('edit-emergency-contact', employee.emergency_contact);
+            
+            // Handle permissions checkboxes
+            const permissions = employee.permissions || [];
+            document.querySelectorAll('input[name="permissions[]"]').forEach(checkbox => {
+                checkbox.checked = permissions.includes(checkbox.value);
+            });
+        }
+        
+        // Show employee details modal
+        function showEmployeeModal(employee) {
+            console.log('showEmployeeModal called with:', employee); // Debug log
+            
+            if (!employee) {
+                showNotification('Employee data is missing', 'error');
+                return;
+            }
+            
+            const modal = document.createElement('div');
+            modal.className = 'modal';
+            modal.innerHTML = `
+                <div class="modal-overlay" onclick="closeModal()"></div>
+                <div class="modal-content">
+                    <div class="flex items-center justify-between mb-6">
+                        <h2 class="text-xl font-semibold">Employee Details</h2>
+                        <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600">
+                            <i class="fas fa-times text-xl"></i>
+                        </button>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Employee ID</label>
+                            <p class="mt-1 text-gray-900">${employee.employee_id || 'N/A'}</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Name</label>
+                            <p class="mt-1 text-gray-900">${employee.name || 'N/A'}</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Email</label>
+                            <p class="mt-1 text-gray-900">${employee.email || 'N/A'}</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Phone</label>
+                            <p class="mt-1 text-gray-900">${employee.phone || 'N/A'}</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Department</label>
+                            <p class="mt-1 text-gray-900">${employee.department || 'N/A'}</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Position</label>
+                            <p class="mt-1 text-gray-900">${employee.position || 'N/A'}</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Hire Date</label>
+                            <p class="mt-1 text-gray-900">${employee.hire_date || 'N/A'}</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Status</label>
+                            <span class="badge badge-${employee.status || 'unknown'}">${employee.status || 'N/A'}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-6 flex justify-end space-x-3">
+                        <button onclick="editEmployee(${employee.id || 0})" class="btn btn-primary">Edit Employee</button>
+                        <button onclick="closeModal()" class="btn btn-secondary">Close</button>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+        }
+        
+        // View employee details
+        async function viewEmployee(id) {
+            try {
+                const response = await fetch(`${API_BASE}?action=get&id=${id}`);
+                const result = await response.json();
+                
+                console.log('Employee data received:', result); // Debug log
+                
+                if (result.success) {
+                    showEmployeeModal(result.data);
+                } else {
+                    showNotification(result.error || 'Failed to load employee details', 'error');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showNotification('Error loading employee details', 'error');
+            }
+        }
+        
+        // Edit employee
+        async function editEmployee(id) {
+            try {
+                const response = await fetch(`${API_BASE}?action=get&id=${id}`);
+                const result = await response.json();
+                
+                console.log('Employee data for edit:', result); // Debug log
+                
+                if (result.success) {
+                    populateEditForm(result.data);
+                    openModal('edit-employee-modal');
+                } else {
+                    showNotification(result.error || 'Failed to load employee details', 'error');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showNotification('Error loading employee details', 'error');
+            }
+        }
+        
+        // Delete employee
+        async function deleteEmployee(id) {
+            if (!confirm('Are you sure you want to delete this employee?')) return;
+            
+            try {
+                const response = await fetch(`${API_BASE}?action=delete`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ id: id })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showNotification('Employee deleted successfully!', 'success');
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1000);
+                } else {
+                    showNotification(result.error || 'Failed to delete employee', 'error');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showNotification('Error deleting employee', 'error');
+            }
+        }
+        
+        // Handle bulk actions
+        async function handleBulkAction(action) {
+            if (!action) return;
+            
+            const selectedIds = Array.from(document.querySelectorAll('.employee-checkbox:checked'))
+                .map(cb => cb.dataset.id);
+            
+            if (selectedIds.length === 0) {
+                showNotification('Please select at least one employee', 'warning');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}?action=bulk`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        action: action,
+                        ids: selectedIds
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showNotification(`Bulk action completed successfully!`, 'success');
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1000);
+                } else {
+                    showNotification(result.error || 'Failed to perform bulk action', 'error');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showNotification('Error performing bulk action', 'error');
+            }
+            
+            // Reset the select dropdown
+            document.querySelector('select[onchange="handleBulkAction(this.value)"]').selectedIndex = 0;
+        }
+        
+        // Export employees
+        async function exportEmployees() {
+            try {
+                const response = await fetch(`${API_BASE}?action=export`);
+                const blob = await response.blob();
+                
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `employees_export_${new Date().getTime()}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                
+                showNotification('Employee data exported successfully!', 'success');
+            } catch (error) {
+                console.error('Error:', error);
+                showNotification('Error exporting employee data', 'error');
+            }
+        }
+        
+        // Notification helper
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.className = `fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg z-50 text-white ${getNotificationColor(type)}`;
+            notification.textContent = message;
+            
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }
+        
+        function getNotificationColor(type) {
+            switch (type) {
+                case 'success': return 'bg-green-500';
+                case 'error': return 'bg-red-500';
+                case 'warning': return 'bg-yellow-500';
+                case 'info': return 'bg-blue-500';
+                default: return 'bg-gray-500';
+            }
+        }
+        
+        // Modal helper functions
+        function openModal(modalId) {
+            const modal = document.getElementById(modalId);
+            if (modal) {
+                modal.classList.remove('hidden');
+                modal.classList.add('show');
+            }
+        }
+        
+        function closeModal(modalId) {
+            if (modalId) {
+                const modal = document.getElementById(modalId);
+                if (modal) {
+                    modal.classList.add('hidden');
+                    modal.classList.remove('show');
+                }
+            } else {
+                // Close any dynamically created modal
+                const modals = document.querySelectorAll('.modal.show');
+                modals.forEach(modal => {
+                    if (modal.id) {
+                        modal.classList.add('hidden');
+                        modal.classList.remove('show');
+                    } else {
+                        modal.remove();
+                    }
+                });
+            }
+        }
+    </script>
 </body>
 </html>

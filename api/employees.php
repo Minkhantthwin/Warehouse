@@ -1,4 +1,17 @@
 <?php
+require_once '../includes/config.php';
+require_once '../includes/auth.php';
+
+// Check remember me token
+checkRememberMe();
+
+// For API endpoints, check login status but don't redirect
+if (!isLoggedIn()) {
+    http_response_code(401);
+    echo json_encode(['success' => false, 'error' => 'Authentication required']);
+    exit();
+}
+
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
@@ -9,50 +22,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit();
 }
 
-require_once '../includes/config.php';
-require_once '../includes/auth.php';
-
-// Check remember me token
-checkRememberMe();
-
-// Require login
-requireLogin();
-
 $currentAdmin = getLoggedInAdmin();
-$action = $_GET['action'] ?? $_POST['action'] ?? '';
+$method = $_SERVER['REQUEST_METHOD'];
+$action = $_GET['action'] ?? '';
 
 try {
-    switch ($action) {
-        case 'list':
-            getEmployees();
+    switch ($method) {
+        case 'GET':
+            if ($action === 'list') {
+                getEmployees();
+            } elseif ($action === 'get' && isset($_GET['id'])) {
+                getEmployee($_GET['id']);
+            } elseif ($action === 'stats') {
+                getEmployeeStats();
+            } else {
+                http_response_code(400);
+                echo json_encode(['success' => false, 'error' => 'Invalid action']);
+            }
             break;
-        case 'get':
-            getEmployee($_GET['id']);
+            
+        case 'POST':
+            if ($action === 'create') {
+                createEmployee();
+            } elseif ($action === 'update') {
+                updateEmployee();
+            } elseif ($action === 'delete') {
+                deleteEmployee();
+            } elseif ($action === 'bulk') {
+                bulkActions();
+            } else {
+                http_response_code(400);
+                echo json_encode(['success' => false, 'error' => 'Invalid action']);
+            }
             break;
-        case 'stats':
-            getEmployeeStats();
-            break;
-        case 'create':
-            createEmployee();
-            break;
-        case 'update':
-            updateEmployee();
-            break;
-        case 'delete':
-            deleteEmployee();
-            break;
-        case 'bulk':
-            bulkActions();
-            break;
+            
         default:
             http_response_code(405);
-            echo json_encode(['success' => false, 'error' => 'Invalid action']);
+            echo json_encode(['success' => false, 'error' => 'Method not allowed']);
             break;
     }
 } catch (Exception $e) {
     error_log("Employees API Error: " . $e->getMessage());
+    error_log("Stack trace: " . $e->getTraceAsString());
     http_response_code(500);
-    echo json_encode(['success' => false, 'error' => 'Internal server error occurred']);
+    echo json_encode(['success' => false, 'error' => 'Internal server error: ' . $e->getMessage()]);
 }
 
 function getEmployees() {
@@ -190,7 +203,7 @@ function getEmployee($id) {
         echo json_encode(['success' => true, 'data' => $employee]);
     } else {
         http_response_code(404);
-        echo json_encode(['error' => 'Employee not found']);
+        echo json_encode(['success' => false, 'error' => 'Employee not found']);
     }
 }
 
@@ -237,7 +250,7 @@ function createEmployee() {
     foreach ($required as $field) {
         if (empty($input[$field])) {
             http_response_code(400);
-            echo json_encode(['error' => "Field '$field' is required"]);
+            echo json_encode(['success' => false, 'error' => "Field '$field' is required"]);
             return;
         }
     }
@@ -247,10 +260,24 @@ function createEmployee() {
     $stmt->execute(['email' => $input['email']]);
     if ($stmt->fetch()) {
         http_response_code(400);
-        echo json_encode(['error' => 'Email already exists']);
+        echo json_encode(['success' => false, 'error' => 'Email already exists']);
         return;
     }
     
+    // Validate enums
+    $allowedDepartments = ['warehouse','logistics','inventory','quality','maintenance','administration'];
+    $allowedShifts = ['day','night','rotating'];
+    if (!in_array($input['department'], $allowedDepartments, true)) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Invalid department']);
+        return;
+    }
+    if (isset($input['shift']) && $input['shift'] !== '' && !in_array($input['shift'], $allowedShifts, true)) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Invalid shift']);
+        return;
+    }
+
     try {
         // Generate employee ID
         $stmt = $pdo->query("SELECT MAX(CAST(SUBSTRING(employee_id, 4) AS UNSIGNED)) as max_id FROM Employee WHERE employee_id LIKE 'EMP%'");
@@ -273,7 +300,7 @@ function createEmployee() {
         $defaultPassword = 'employee123';
         
         $stmt = $pdo->prepare($query);
-        $stmt->execute([
+        $result = $stmt->execute([
             'employee_id' => $employeeId,
             'name' => $input['name'],
             'email' => $input['email'],
@@ -284,12 +311,16 @@ function createEmployee() {
             'position' => $input['position'],
             'hire_date' => $input['hire_date'] ?? date('Y-m-d'),
             'salary' => $input['salary'] ?? null,
-            'shift' => $input['shift'] ?? 'day',
+            'shift' => ($input['shift'] ?? 'day') ?: 'day',
             'address' => $input['address'] ?? null,
             'emergency_contact' => $input['emergency_contact'] ?? null,
             'status' => 'active',
             'admin_id' => $_SESSION['admin_id'] // Assign to current admin
         ]);
+        
+        if (!$result) {
+            throw new PDOException("Failed to insert employee");
+        }
         
         $employeeDbId = $pdo->lastInsertId();
         
@@ -304,8 +335,9 @@ function createEmployee() {
         ]);
         
     } catch (PDOException $e) {
+        error_log("Employee creation error: " . $e->getMessage());
         http_response_code(500);
-        echo json_encode(['error' => 'Failed to create employee: ' . $e->getMessage()]);
+        echo json_encode(['success' => false, 'error' => 'Failed to create employee: ' . $e->getMessage()]);
     }
 }
 
@@ -317,7 +349,7 @@ function updateEmployee() {
     
     if (!$id) {
         http_response_code(400);
-        echo json_encode(['error' => 'Employee ID is required']);
+        echo json_encode(['success' => false, 'error' => 'Employee ID is required']);
         return;
     }
     
@@ -341,7 +373,7 @@ function updateEmployee() {
             $params['phone'] = $input['phone'];
         }
         
-        if (isset($input['department'])) {
+    if (isset($input['department'])) {
             $fields[] = "department = :department";
             $params['department'] = $input['department'];
         }
@@ -356,7 +388,7 @@ function updateEmployee() {
             $params['salary'] = $input['salary'];
         }
         
-        if (isset($input['shift'])) {
+    if (isset($input['shift'])) {
             $fields[] = "shift = :shift";
             $params['shift'] = $input['shift'];
         }
@@ -378,10 +410,28 @@ function updateEmployee() {
         
         if (empty($fields)) {
             http_response_code(400);
-            echo json_encode(['error' => 'No fields to update']);
+            echo json_encode(['success' => false, 'error' => 'No fields to update']);
             return;
         }
         
+        // Validate enums if present
+        if (isset($params['department'])) {
+            $allowedDepartments = ['warehouse','logistics','inventory','quality','maintenance','administration'];
+            if (!in_array($params['department'], $allowedDepartments, true)) {
+                http_response_code(400);
+                echo json_encode(['success' => false, 'error' => 'Invalid department']);
+                return;
+            }
+        }
+        if (isset($params['shift'])) {
+            $allowedShifts = ['day','night','rotating'];
+            if (!in_array($params['shift'], $allowedShifts, true)) {
+                http_response_code(400);
+                echo json_encode(['success' => false, 'error' => 'Invalid shift']);
+                return;
+            }
+        }
+
         $query = "UPDATE Employee SET " . implode(', ', $fields) . " WHERE id = :id";
         $stmt = $pdo->prepare($query);
         $stmt->execute($params);
@@ -393,7 +443,7 @@ function updateEmployee() {
         
     } catch (PDOException $e) {
         http_response_code(500);
-        echo json_encode(['error' => 'Failed to update employee: ' . $e->getMessage()]);
+        echo json_encode(['success' => false, 'error' => 'Failed to update employee: ' . $e->getMessage()]);
     }
 }
 
@@ -405,7 +455,7 @@ function deleteEmployee() {
     
     if (!$id) {
         http_response_code(400);
-        echo json_encode(['error' => 'Employee ID is required']);
+        echo json_encode(['success' => false, 'error' => 'Employee ID is required']);
         return;
     }
     
@@ -417,7 +467,7 @@ function deleteEmployee() {
         
         if ($transactionCount > 0) {
             http_response_code(400);
-            echo json_encode(['error' => 'Cannot delete employee with transaction history. Consider deactivating instead.']);
+            echo json_encode(['success' => false, 'error' => 'Cannot delete employee with transaction history. Consider deactivating instead.']);
             return;
         }
         
@@ -431,7 +481,7 @@ function deleteEmployee() {
         
     } catch (PDOException $e) {
         http_response_code(500);
-        echo json_encode(['error' => 'Failed to delete employee: ' . $e->getMessage()]);
+        echo json_encode(['success' => false, 'error' => 'Failed to delete employee: ' . $e->getMessage()]);
     }
 }
 
@@ -444,7 +494,7 @@ function bulkActions() {
     
     if (empty($ids)) {
         http_response_code(400);
-        echo json_encode(['error' => 'No employee IDs provided']);
+        echo json_encode(['success' => false, 'error' => 'No employee IDs provided']);
         return;
     }
     
@@ -466,7 +516,7 @@ function bulkActions() {
                 $department = $input['department'] ?? '';
                 if (!$department) {
                     http_response_code(400);
-                    echo json_encode(['error' => 'Department is required for bulk update']);
+                    echo json_encode(['success' => false, 'error' => 'Department is required for bulk update']);
                     return;
                 }
                 $stmt = $pdo->prepare("UPDATE Employee SET department = ? WHERE id IN ($placeholders)");
@@ -475,7 +525,7 @@ function bulkActions() {
                 
             default:
                 http_response_code(400);
-                echo json_encode(['error' => 'Invalid bulk action']);
+                echo json_encode(['success' => false, 'error' => 'Invalid bulk action']);
                 return;
         }
         
@@ -486,7 +536,7 @@ function bulkActions() {
         
     } catch (PDOException $e) {
         http_response_code(500);
-        echo json_encode(['error' => 'Failed to perform bulk action: ' . $e->getMessage()]);
+        echo json_encode(['success' => false, 'error' => 'Failed to perform bulk action: ' . $e->getMessage()]);
     }
 }
 ?>

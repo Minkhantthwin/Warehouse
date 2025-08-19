@@ -443,7 +443,9 @@ function handleUpdateLocation() {
 function handleDeleteLocation() {
     global $pdo, $currentAdmin;
     
-    $id = $_POST['id'] ?? $_GET['id'] ?? null;
+    $input = json_decode(file_get_contents('php://input'), true);
+    $id = $input['id'] ?? $_POST['id'] ?? $_GET['id'] ?? null;
+    
     if (!$id) {
         http_response_code(400);
         echo json_encode(['success' => false, 'error' => 'Location ID is required']);
@@ -452,10 +454,8 @@ function handleDeleteLocation() {
     
     // Check if location exists and get usage info
     $checkQuery = "SELECT l.name, 
-                          COALESCE(SUM(i.quantity), 0) as total_inventory,
                           COUNT(DISTINCT br.id) as borrowing_requests
                    FROM Location l 
-                   LEFT JOIN Inventory i ON l.id = i.location_id 
                    LEFT JOIN Borrowing_Request br ON l.id = br.location_id
                    WHERE l.id = :id 
                    GROUP BY l.id, l.name";
@@ -470,17 +470,7 @@ function handleDeleteLocation() {
         return;
     }
     
-    // Check if location has inventory or borrowing requests
-    if ($location['total_inventory'] > 0) {
-        http_response_code(409);
-        echo json_encode([
-            'success' => false, 
-            'error' => 'Cannot delete location that contains inventory. Please move all inventory items first.',
-            'inventory_count' => $location['total_inventory']
-        ]);
-        return;
-    }
-    
+    // Check if location has borrowing requests
     if ($location['borrowing_requests'] > 0) {
         http_response_code(409);
         echo json_encode([
@@ -528,62 +518,76 @@ function handleGetStats() {
         $totalStmt = $pdo->query($totalQuery);
         $totalLocations = $totalStmt->fetch()['total'];
         
-        // Locations with inventory
-        $withInventoryQuery = "SELECT COUNT(DISTINCT l.id) as count 
-                               FROM Location l 
-                               INNER JOIN Inventory i ON l.id = i.location_id 
-                               WHERE i.quantity > 0";
-        $withInventoryStmt = $pdo->query($withInventoryQuery);
-        $locationsWithInventory = $withInventoryStmt->fetch()['count'];
+        // Locations with borrowing requests
+        $withRequestsQuery = "SELECT COUNT(DISTINCT l.id) as count 
+                              FROM Location l 
+                              INNER JOIN Borrowing_Request br ON l.id = br.location_id";
+        $withRequestsStmt = $pdo->query($withRequestsQuery);
+        $locationsWithRequests = $withRequestsStmt->fetch()['count'];
         
-        // Empty locations
-        $emptyLocations = $totalLocations - $locationsWithInventory;
+        // Empty locations (no borrowing requests)
+        $emptyLocations = $totalLocations - $locationsWithRequests;
         
-        // Total inventory across all locations
-        $inventoryQuery = "SELECT SUM(quantity) as total_inventory FROM Inventory";
-        $inventoryStmt = $pdo->query($inventoryQuery);
-        $totalInventory = $inventoryStmt->fetch()['total_inventory'] ?? 0;
+        // Total borrowing requests across all locations
+        $requestsQuery = "SELECT COUNT(*) as total_requests FROM Borrowing_Request";
+        $requestsStmt = $pdo->query($requestsQuery);
+        $totalRequests = $requestsStmt->fetch()['total_requests'] ?? 0;
         
-        // Location with most inventory
-        $topLocationQuery = "SELECT l.name, l.city, l.state, SUM(i.quantity) as inventory_count 
+        // Location with most requests
+        $topLocationQuery = "SELECT l.name, l.city, l.state, COUNT(br.id) as request_count 
                              FROM Location l 
-                             INNER JOIN Inventory i ON l.id = i.location_id 
+                             INNER JOIN Borrowing_Request br ON l.id = br.location_id 
                              GROUP BY l.id, l.name, l.city, l.state 
-                             ORDER BY inventory_count DESC 
+                             ORDER BY request_count DESC 
                              LIMIT 1";
         $topLocationStmt = $pdo->query($topLocationQuery);
         $topLocation = $topLocationStmt->fetch();
         
-        // Average inventory per location
-        $avgInventoryQuery = "SELECT AVG(inventory_count) as avg_inventory 
-                              FROM (
-                                  SELECT SUM(i.quantity) as inventory_count 
-                                  FROM Location l 
-                                  LEFT JOIN Inventory i ON l.id = i.location_id 
-                                  GROUP BY l.id
-                              ) as counts";
-        $avgInventoryStmt = $pdo->query($avgInventoryQuery);
-        $avgInventory = $avgInventoryStmt->fetch()['avg_inventory'] ?? 0;
+        // Average requests per location
+        $avgRequestsQuery = "SELECT AVG(request_count) as avg_requests 
+                             FROM (
+                                 SELECT COUNT(br.id) as request_count 
+                                 FROM Location l 
+                                 LEFT JOIN Borrowing_Request br ON l.id = br.location_id 
+                                 GROUP BY l.id
+                             ) as counts";
+        $avgRequestsStmt = $pdo->query($avgRequestsQuery);
+        $avgRequests = $avgRequestsStmt->fetch()['avg_requests'] ?? 0;
         
         // Country distribution
         $countryQuery = "SELECT country, COUNT(*) as count 
                          FROM Location 
-                         WHERE country IS NOT NULL 
+                         WHERE country IS NOT NULL AND country != ''
                          GROUP BY country 
                          ORDER BY count DESC";
         $countryStmt = $pdo->query($countryQuery);
         $countryDistribution = $countryStmt->fetchAll(PDO::FETCH_ASSOC);
         
+        // Active vs inactive requests by location
+        $requestStatusQuery = "SELECT l.name,
+                                      COUNT(CASE WHEN br.status = 'active' THEN 1 END) as active_requests,
+                                      COUNT(CASE WHEN br.status = 'pending' THEN 1 END) as pending_requests,
+                                      COUNT(CASE WHEN br.status = 'returned' THEN 1 END) as completed_requests
+                               FROM Location l 
+                               LEFT JOIN Borrowing_Request br ON l.id = br.location_id 
+                               GROUP BY l.id, l.name
+                               HAVING COUNT(br.id) > 0
+                               ORDER BY active_requests DESC 
+                               LIMIT 5";
+        $requestStatusStmt = $pdo->query($requestStatusQuery);
+        $topActiveLocations = $requestStatusStmt->fetchAll(PDO::FETCH_ASSOC);
+        
         echo json_encode([
             'success' => true,
             'data' => [
                 'total_locations' => (int)$totalLocations,
-                'locations_with_inventory' => (int)$locationsWithInventory,
+                'locations_with_requests' => (int)$locationsWithRequests,
                 'empty_locations' => (int)$emptyLocations,
-                'total_inventory' => (int)$totalInventory,
+                'total_requests' => (int)$totalRequests,
                 'top_location' => $topLocation,
-                'average_inventory_per_location' => round($avgInventory, 2),
-                'country_distribution' => $countryDistribution
+                'average_requests_per_location' => round($avgRequests, 2),
+                'country_distribution' => $countryDistribution,
+                'top_active_locations' => $topActiveLocations
             ]
         ]);
         
@@ -619,16 +623,14 @@ function handleBulkDelete() {
         
         $placeholders = str_repeat('?,', count($locationIds) - 1) . '?';
         
-        // Check for locations with inventory or borrowing requests
+        // Check for locations with borrowing requests
         $checkQuery = "SELECT l.id, l.name, 
-                              COALESCE(SUM(i.quantity), 0) as inventory_count,
                               COUNT(DISTINCT br.id) as request_count
                        FROM Location l 
-                       LEFT JOIN Inventory i ON l.id = i.location_id 
                        LEFT JOIN Borrowing_Request br ON l.id = br.location_id
                        WHERE l.id IN ($placeholders) 
                        GROUP BY l.id, l.name 
-                       HAVING inventory_count > 0 OR request_count > 0";
+                       HAVING request_count > 0";
         $checkStmt = $pdo->prepare($checkQuery);
         $checkStmt->execute($locationIds);
         $locationsWithData = $checkStmt->fetchAll();
@@ -639,7 +641,7 @@ function handleBulkDelete() {
             http_response_code(409);
             echo json_encode([
                 'success' => false, 
-                'error' => 'Cannot delete locations that contain inventory or have borrowing requests: ' . implode(', ', $names),
+                'error' => 'Cannot delete locations that have borrowing requests: ' . implode(', ', $names),
                 'locations_with_data' => $locationsWithData
             ]);
             return;
@@ -702,11 +704,10 @@ function handleExport() {
     }
     
     $query = "SELECT l.*, 
-                     COUNT(DISTINCT i.material_id) as unique_materials,
-                     COALESCE(SUM(i.quantity), 0) as total_inventory,
-                     COUNT(DISTINCT br.id) as borrowing_requests
+                     COUNT(DISTINCT br.id) as borrowing_requests,
+                     COUNT(DISTINCT CASE WHEN br.status = 'active' THEN br.id END) as active_requests,
+                     COUNT(DISTINCT CASE WHEN br.status = 'pending' THEN br.id END) as pending_requests
               FROM Location l 
-              LEFT JOIN Inventory i ON l.id = i.location_id 
               LEFT JOIN Borrowing_Request br ON l.id = br.location_id
               $whereClause
               GROUP BY l.id, l.name, l.address, l.city, l.state, l.zip_code, l.country
@@ -725,7 +726,7 @@ function handleExport() {
         // CSV Headers
         fputcsv($output, [
             'ID', 'Name', 'Address', 'City', 'State', 'ZIP Code', 'Country',
-            'Unique Materials', 'Total Inventory', 'Borrowing Requests'
+            'Total Requests', 'Active Requests', 'Pending Requests'
         ]);
         
         // CSV Data
@@ -738,9 +739,9 @@ function handleExport() {
                 $location['state'] ?? '',
                 $location['zip_code'] ?? '',
                 $location['country'] ?? '',
-                $location['unique_materials'],
-                $location['total_inventory'],
-                $location['borrowing_requests']
+                $location['borrowing_requests'],
+                $location['active_requests'],
+                $location['pending_requests']
             ]);
         }
         
@@ -879,13 +880,6 @@ function handleCheckUsage() {
     }
     
     try {
-        // Check inventory count
-        $inventoryQuery = "SELECT SUM(quantity) as count FROM Inventory WHERE location_id = :id";
-        $inventoryStmt = $pdo->prepare($inventoryQuery);
-        $inventoryStmt->bindValue(':id', $id, PDO::PARAM_INT);
-        $inventoryStmt->execute();
-        $inventoryCount = $inventoryStmt->fetch()['count'] ?? 0;
-        
         // Check borrowing requests
         $requestsQuery = "SELECT COUNT(*) as count FROM Borrowing_Request WHERE location_id = :id";
         $requestsStmt = $pdo->prepare($requestsQuery);
@@ -893,13 +887,20 @@ function handleCheckUsage() {
         $requestsStmt->execute();
         $requestsCount = $requestsStmt->fetch()['count'] ?? 0;
         
+        // Check active requests
+        $activeRequestsQuery = "SELECT COUNT(*) as count FROM Borrowing_Request WHERE location_id = :id AND status = 'active'";
+        $activeRequestsStmt = $pdo->prepare($activeRequestsQuery);
+        $activeRequestsStmt->bindValue(':id', $id, PDO::PARAM_INT);
+        $activeRequestsStmt->execute();
+        $activeRequestsCount = $activeRequestsStmt->fetch()['count'] ?? 0;
+        
         echo json_encode([
             'success' => true,
             'data' => [
-                'inventory_count' => (int)$inventoryCount,
                 'requests_count' => (int)$requestsCount,
-                'can_delete' => $inventoryCount == 0 && $requestsCount == 0,
-                'usage_level' => $inventoryCount > 0 ? 'high' : ($requestsCount > 0 ? 'medium' : 'none')
+                'active_requests_count' => (int)$activeRequestsCount,
+                'can_delete' => $requestsCount == 0,
+                'usage_level' => $activeRequestsCount > 0 ? 'high' : ($requestsCount > 0 ? 'medium' : 'none')
             ]
         ]);
         

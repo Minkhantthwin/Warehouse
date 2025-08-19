@@ -321,10 +321,6 @@ $admins = getAdmins($pdo, $page, $limit, $filters);
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                     <div class="flex items-center space-x-2">
-                                        <button onclick="viewAdmin(<?php echo $admin['id']; ?>)" 
-                                                class="text-blue-600 hover:text-blue-900" title="View Details">
-                                            <i class="fas fa-eye"></i>
-                                        </button>
                                         <button onclick="editAdmin(<?php echo $admin['id']; ?>)" 
                                                 class="text-green-600 hover:text-green-900" title="Edit Admin">
                                             <i class="fas fa-edit"></i>

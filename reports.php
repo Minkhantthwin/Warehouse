@@ -243,7 +243,7 @@ $filterOptions = getFilterOptions($pdo);
         <!-- Main Content Area -->
         <main class="p-6">
             <!-- Stats Cards -->
-            <div class="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
                 <div class="bg-white rounded-lg shadow-md p-6">
                     <div class="flex items-center">
                         <div class="p-3 rounded-full bg-red-100">
@@ -299,7 +299,7 @@ $filterOptions = getFilterOptions($pdo);
                     </div>
                 </div>
 
-                <div class="bg-white rounded-lg shadow-md p-6">
+                <!-- <div class="bg-white rounded-lg shadow-md p-6">
                     <div class="flex items-center">
                         <div class="p-3 rounded-full bg-yellow-100">
                             <i class="fas fa-clock text-yellow-600 text-xl"></i>
@@ -309,7 +309,7 @@ $filterOptions = getFilterOptions($pdo);
                             <p class="text-2xl font-semibold text-gray-900"><?php echo number_format($stats['recent_reports']); ?></p>
                         </div>
                     </div>
-                </div>
+                </div> -->
             </div>
 
             <!-- Search and Filters -->

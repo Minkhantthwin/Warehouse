@@ -727,6 +727,29 @@ $filterOptions = getLocationFilters($pdo);
         </div>
     </div>
 
+    <!-- View Location Modal -->
+    <div id="view-location-modal" class="modal hidden">
+        <div class="modal-overlay" onclick="closeModal('view-location-modal')"></div>
+        <div class="modal-content max-w-4xl">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-lg font-semibold text-gray-800">Location Details</h3>
+                <button onclick="closeModal('view-location-modal')" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            
+            <div id="location-details-content">
+                <!-- Content will be populated by JavaScript -->
+            </div>
+            
+            <div class="flex justify-end space-x-3 mt-6">
+                <button onclick="closeModal('view-location-modal')" class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script src="../js/dashboard.js"></script>
     <script>
         // Initialize select all functionality
@@ -747,8 +770,8 @@ $filterOptions = getLocationFilters($pdo);
                 const result = await response.json();
                 
                 if (result.success) {
-                    // Create a detailed view modal
                     showLocationDetails(result.data);
+                    openModal('view-location-modal');
                 } else {
                     showNotification(result.error || 'Failed to load location details', 'error');
                 }
@@ -759,78 +782,112 @@ $filterOptions = getLocationFilters($pdo);
         }
 
         function showLocationDetails(location) {
-            const modalHtml = `
-                <div id="location-details-modal" class="modal">
-                    <div class="modal-overlay" onclick="closeModal('location-details-modal')"></div>
-                    <div class="modal-content max-w-4xl">
-                        <div class="flex items-center justify-between mb-6">
-                            <h3 class="text-lg font-semibold text-gray-800">Location Details: ${location.name}</h3>
-                            <button onclick="closeModal('location-details-modal')" class="text-gray-400 hover:text-gray-600">
-                                <i class="fas fa-times text-xl"></i>
-                            </button>
-                        </div>
-                        
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                                <h4 class="text-md font-semibold text-gray-700 mb-3">Location Information</h4>
-                                <div class="space-y-2">
-                                    <p><strong>Name:</strong> ${location.name}</p>
-                                    <p><strong>Address:</strong> ${location.address || 'Not specified'}</p>
-                                    <p><strong>City:</strong> ${location.city || 'Not specified'}</p>
-                                    <p><strong>State:</strong> ${location.state || 'Not specified'}</p>
-                                    <p><strong>ZIP Code:</strong> ${location.zip_code || 'Not specified'}</p>
-                                    <p><strong>Country:</strong> ${location.country || 'Not specified'}</p>
+            // Update the content of the existing modal
+            const content = `
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <h4 class="text-md font-semibold text-gray-700 mb-3">Location Information</h4>
+                        <div class="bg-gray-50 p-4 rounded-lg">
+                            <div class="space-y-3">
+                                <div>
+                                    <span class="text-sm font-medium text-gray-500">Name:</span>
+                                    <p class="text-sm text-gray-900">${location.name}</p>
+                                </div>
+                                <div>
+                                    <span class="text-sm font-medium text-gray-500">Address:</span>
+                                    <p class="text-sm text-gray-900">${location.address || 'Not specified'}</p>
+                                </div>
+                                <div>
+                                    <span class="text-sm font-medium text-gray-500">City:</span>
+                                    <p class="text-sm text-gray-900">${location.city || 'Not specified'}</p>
+                                </div>
+                                <div>
+                                    <span class="text-sm font-medium text-gray-500">State:</span>
+                                    <p class="text-sm text-gray-900">${location.state || 'Not specified'}</p>
+                                </div>
+                                <div>
+                                    <span class="text-sm font-medium text-gray-500">ZIP Code:</span>
+                                    <p class="text-sm text-gray-900">${location.zip_code || 'Not specified'}</p>
+                                </div>
+                                <div>
+                                    <span class="text-sm font-medium text-gray-500">Country:</span>
+                                    <p class="text-sm text-gray-900">${location.country || 'Not specified'}</p>
                                 </div>
                             </div>
-                            
-                            <div>
-                                <h4 class="text-md font-semibold text-gray-700 mb-3">Request Summary</h4>
-                                <div class="space-y-2">
-                                    <p><strong>Total Requests:</strong> ${parseInt(location.borrowing_requests).toLocaleString()}</p>
-                                    <p><strong>Active Requests:</strong> ${location.active_requests}</p>
-                                    <p><strong>Pending Requests:</strong> ${location.pending_requests}</p>
-                                    <p><strong>Completed Requests:</strong> ${location.completed_requests || 0}</p>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <h4 class="text-md font-semibold text-gray-700 mb-3">Request Statistics</h4>
+                        <div class="bg-gray-50 p-4 rounded-lg">
+                            <div class="space-y-3">
+                                <div>
+                                    <span class="text-sm font-medium text-gray-500">Total Requests:</span>
+                                    <p class="text-sm text-gray-900">${parseInt(location.borrowing_requests || 0).toLocaleString()}</p>
+                                </div>
+                                <div>
+                                    <span class="text-sm font-medium text-gray-500">Active Requests:</span>
+                                    <p class="text-sm text-gray-900">${location.active_requests || 0}</p>
+                                </div>
+                                <div>
+                                    <span class="text-sm font-medium text-gray-500">Pending Requests:</span>
+                                    <p class="text-sm text-gray-900">${location.pending_requests || 0}</p>
+                                </div>
+                                <div>
+                                    <span class="text-sm font-medium text-gray-500">Completed Requests:</span>
+                                    <p class="text-sm text-gray-900">${location.completed_requests || 0}</p>
+                                </div>
+                                <div>
+                                    <span class="text-sm font-medium text-gray-500">Total Transactions:</span>
+                                    <p class="text-sm text-gray-900">${location.transactions || 0}</p>
                                 </div>
                             </div>
-                        </div>
-                        
-                        ${location.recent_requests && location.recent_requests.length > 0 ? `
-                        <div class="mt-6">
-                            <h4 class="text-md font-semibold text-gray-700 mb-3">Recent Requests</h4>
-                            <div class="overflow-x-auto">
-                                <table class="min-w-full divide-y divide-gray-200">
-                                    <thead class="bg-gray-50">
-                                        <tr>
-                                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Customer</th>
-                                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Request Date</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody class="bg-white divide-y divide-gray-200">
-                                        ${location.recent_requests.map(request => `
-                                            <tr>
-                                                <td class="px-4 py-2 text-sm text-gray-900">${request.customer_name}</td>
-                                                <td class="px-4 py-2 text-sm text-gray-900">
-                                                    <span class="px-2 py-1 text-xs rounded-full ${request.status === 'active' ? 'bg-green-100 text-green-800' : request.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'}">${request.status}</span>
-                                                </td>
-                                                <td class="px-4 py-2 text-sm text-gray-500">${new Date(request.request_date).toLocaleDateString()}</td>
-                                            </tr>
-                                        `).join('')}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                        ` : ''}
-                        
-                        <div class="flex justify-end space-x-3 mt-6">
-                            <button onclick="closeModal('location-details-modal')" class="btn btn-secondary">Close</button>
-                            <button onclick="editLocation(${location.id}); closeModal('location-details-modal')" class="btn btn-primary">Edit Location</button>
                         </div>
                     </div>
                 </div>
+                
+                ${location.recent_requests && location.recent_requests.length > 0 ? `
+                <div class="mt-6">
+                    <h4 class="text-md font-semibold text-gray-700 mb-3">Recent Requests</h4>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Customer</th>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Employee</th>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Request Date</th>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Purpose</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                ${location.recent_requests.map(request => `
+                                    <tr>
+                                        <td class="px-4 py-2 text-sm text-gray-900">#${request.id}</td>
+                                        <td class="px-4 py-2 text-sm text-gray-900">${request.customer_name || 'N/A'}</td>
+                                        <td class="px-4 py-2 text-sm text-gray-900">${request.employee_name || 'N/A'}</td>
+                                        <td class="px-4 py-2 text-sm text-gray-900">
+                                            <span class="px-2 py-1 text-xs rounded-full ${
+                                                request.status === 'active' ? 'bg-green-100 text-green-800' : 
+                                                request.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 
+                                                request.status === 'approved' ? 'bg-blue-100 text-blue-800' :
+                                                request.status === 'returned' ? 'bg-gray-100 text-gray-800' :
+                                                'bg-red-100 text-red-800'
+                                            }">${request.status}</span>
+                                        </td>
+                                        <td class="px-4 py-2 text-sm text-gray-500">${new Date(request.request_date).toLocaleDateString()}</td>
+                                        <td class="px-4 py-2 text-sm text-gray-500">${request.purpose ? (request.purpose.length > 30 ? request.purpose.substring(0, 30) + '...' : request.purpose) : 'N/A'}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                ` : '<div class="mt-6 text-center text-gray-500"><p>No recent requests found for this location.</p></div>'}
             `;
             
-            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            document.getElementById('location-details-content').innerHTML = content;
         }
 
         async function editLocation(id) {
@@ -875,15 +932,18 @@ $filterOptions = getLocationFilters($pdo);
                 const response = await fetch('../api/locations.php', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'Content-Type': 'application/json',
                     },
-                    body: `action=delete&id=${id}`
+                    body: JSON.stringify({
+                        action: 'delete',
+                        id: id
+                    })
                 });
                 
                 const result = await response.json();
                 
                 if (result.success) {
-                    showNotification('Location deleted successfully', 'success');
+                    showNotification('Location deleted successfully!', 'success');
                     // Reload the page to update the list
                     setTimeout(() => {
                         window.location.reload();
@@ -893,7 +953,7 @@ $filterOptions = getLocationFilters($pdo);
                 }
             } catch (error) {
                 console.error('Error deleting location:', error);
-                showNotification('Failed to delete location', 'error');
+                showNotification('Network error occurred while deleting location', 'error');
             }
         }
 
