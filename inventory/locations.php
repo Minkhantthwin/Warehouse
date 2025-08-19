@@ -8,8 +8,8 @@ checkRememberMe();
 // Require login
 requireLogin();
 
-// Check permission for inventory management
-if (!hasPermission('inventory_management')) {
+// Check permission for borrowing management
+if (!hasPermission('borrowing_management')) {
     header('Location: ../index.php');
     exit();
 }
@@ -454,6 +454,136 @@ $filterOptions = getLocationFilters($pdo);
                 </div>
             </div>
         </main>
+    </div>
+
+    <!-- Add Location Modal -->
+    <div id="add-location-modal" class="modal hidden">
+        <div class="modal-overlay" onclick="closeModal('add-location-modal')"></div>
+        <div class="modal-content max-w-2xl">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-lg font-semibold text-gray-800">Add New Location</h3>
+                <button onclick="closeModal('add-location-modal')" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            
+            <form id="add-location-form">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div class="md:col-span-2">
+                        <label for="add-location-name" class="block text-sm font-medium text-gray-700 mb-2">Location Name *</label>
+                        <input type="text" id="add-location-name" name="name" required 
+                               class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                               placeholder="Enter location name">
+                    </div>
+                    
+                    <div class="md:col-span-2">
+                        <label for="add-location-address" class="block text-sm font-medium text-gray-700 mb-2">Address</label>
+                        <input type="text" id="add-location-address" name="address" 
+                               class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                               placeholder="Enter street address">
+                    </div>
+                    
+                    <div>
+                        <label for="add-location-city" class="block text-sm font-medium text-gray-700 mb-2">City</label>
+                        <input type="text" id="add-location-city" name="city" 
+                               class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                               placeholder="Enter city">
+                    </div>
+                    
+                    <div>
+                        <label for="add-location-state" class="block text-sm font-medium text-gray-700 mb-2">State/Province</label>
+                        <input type="text" id="add-location-state" name="state" 
+                               class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                               placeholder="Enter state/province">
+                    </div>
+                    
+                    <div>
+                        <label for="add-location-zip" class="block text-sm font-medium text-gray-700 mb-2">ZIP/Postal Code</label>
+                        <input type="text" id="add-location-zip" name="zip_code" 
+                               class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                               placeholder="Enter ZIP/postal code">
+                    </div>
+                    
+                    <div>
+                        <label for="add-location-country" class="block text-sm font-medium text-gray-700 mb-2">Country</label>
+                        <input type="text" id="add-location-country" name="country" 
+                               class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                               placeholder="Enter country">
+                    </div>
+                </div>
+                
+                <div class="flex justify-end space-x-3">
+                    <button type="button" onclick="closeModal('add-location-modal')" class="btn btn-secondary">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add Location</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit Location Modal -->
+    <div id="edit-location-modal" class="modal hidden">
+        <div class="modal-overlay" onclick="closeModal('edit-location-modal')"></div>
+        <div class="modal-content max-w-2xl">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-lg font-semibold text-gray-800">Edit Location</h3>
+                <button onclick="closeModal('edit-location-modal')" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            
+            <form id="edit-location-form">
+                <input type="hidden" name="id" id="edit-location-id">
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div class="md:col-span-2">
+                        <label for="edit-location-name" class="block text-sm font-medium text-gray-700 mb-2">Location Name *</label>
+                        <input type="text" id="edit-location-name" name="name" required 
+                               class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                               placeholder="Enter location name">
+                    </div>
+                    
+                    <div class="md:col-span-2">
+                        <label for="edit-location-address" class="block text-sm font-medium text-gray-700 mb-2">Address</label>
+                        <input type="text" id="edit-location-address" name="address" 
+                               class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                               placeholder="Enter street address">
+                    </div>
+                    
+                    <div>
+                        <label for="edit-location-city" class="block text-sm font-medium text-gray-700 mb-2">City</label>
+                        <input type="text" id="edit-location-city" name="city" 
+                               class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                               placeholder="Enter city">
+                    </div>
+                    
+                    <div>
+                        <label for="edit-location-state" class="block text-sm font-medium text-gray-700 mb-2">State/Province</label>
+                        <input type="text" id="edit-location-state" name="state" 
+                               class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                               placeholder="Enter state/province">
+                    </div>
+                    
+                    <div>
+                        <label for="edit-location-zip" class="block text-sm font-medium text-gray-700 mb-2">ZIP/Postal Code</label>
+                        <input type="text" id="edit-location-zip" name="zip_code" 
+                               class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                               placeholder="Enter ZIP/postal code">
+                    </div>
+                    
+                    <div>
+                        <label for="edit-location-country" class="block text-sm font-medium text-gray-700 mb-2">Country</label>
+                        <input type="text" id="edit-location-country" name="country" 
+                               class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                               placeholder="Enter country">
+                    </div>
+                </div>
+                
+                <div class="flex justify-end space-x-3">
+                    <button type="button" onclick="closeModal('edit-location-modal')" class="btn btn-secondary">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Update Location</button>
+                </div>
+            </form>
+        </div>
     </div>
 
     <!-- Add Location Modal -->
@@ -929,6 +1059,10 @@ $filterOptions = getLocationFilters($pdo);
                 country: formData.get('country')
             };
 
+            // Debug logging
+            console.log('Form data being sent:', locationData);
+            console.log('Form elements:', this.elements);
+
             try {
                 const response = await fetch('../api/locations.php', {
                     method: 'POST',
@@ -938,7 +1072,11 @@ $filterOptions = getLocationFilters($pdo);
                     body: JSON.stringify(locationData)
                 });
                 
+                console.log('Response status:', response.status);
+                console.log('Response headers:', response.headers);
+                
                 const result = await response.json();
+                console.log('Response data:', result);
                 
                 if (result.success) {
                     showNotification('Location created successfully', 'success');

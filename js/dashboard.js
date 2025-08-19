@@ -254,7 +254,8 @@ function loadMaterialsData() {
 function openModal(modalId) {
     const modal = document.getElementById(modalId);
     if (modal) {
-        modal.classList.remove('hidden');
+        modal.classList.add('show');
+        modal.style.display = 'flex';
         document.body.style.overflow = 'hidden';
     }
 }
@@ -262,7 +263,10 @@ function openModal(modalId) {
 function closeModal(modalId) {
     const modal = document.getElementById(modalId);
     if (modal) {
-        modal.classList.add('hidden');
+        modal.classList.remove('show');
+        setTimeout(() => {
+            modal.style.display = 'none';
+        }, 300); // Wait for transition
         document.body.style.overflow = 'auto';
     }
 }
@@ -270,7 +274,10 @@ function closeModal(modalId) {
 function closeModals() {
     const modals = document.querySelectorAll('.modal');
     modals.forEach(modal => {
-        modal.classList.add('hidden');
+        modal.classList.remove('show');
+        setTimeout(() => {
+            modal.style.display = 'none';
+        }, 300);
     });
     document.body.style.overflow = 'auto';
 }

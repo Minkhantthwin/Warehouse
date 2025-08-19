@@ -83,9 +83,14 @@ $currentAdmin = getLoggedInAdmin();
                 Borrowing Requests
             </a>
 
-            <a href="<?php echo $pathPrefix; ?>transactions.php" class="nav-link flex items-center px-4 py-3 text-gray-300 hover:bg-gray-700 hover:text-white rounded-lg <?php echo (basename($_SERVER['PHP_SELF']) == 'transactions.php') ? 'active' : ''; ?>">
+            <a href="<?php echo $pathPrefix; ?>borrowing-items.php" class="nav-link flex items-center px-4 py-3 text-gray-300 hover:bg-gray-700 hover:text-white rounded-lg <?php echo (basename($_SERVER['PHP_SELF']) == 'borrowing-items.php') ? 'active' : ''; ?>">
+                <i class="fas fa-boxes mr-3"></i>
+                Borrowing Items
+            </a>
+
+            <a href="<?php echo $pathPrefix; ?>borrowing-transactions.php" class="nav-link flex items-center px-4 py-3 text-gray-300 hover:bg-gray-700 hover:text-white rounded-lg <?php echo (basename($_SERVER['PHP_SELF']) == 'borrowing-transactions.php') ? 'active' : ''; ?>">
                 <i class="fas fa-exchange-alt mr-3"></i>
-                Transactions
+                Borrowing Transactions
             </a>
 
             <a href="<?php echo $pathPrefix; ?>reports.php" class="nav-link flex items-center px-4 py-3 text-gray-300 hover:bg-gray-700 hover:text-white rounded-lg <?php echo (basename($_SERVER['PHP_SELF']) == 'reports.php') ? 'active' : ''; ?>">
@@ -93,9 +98,9 @@ $currentAdmin = getLoggedInAdmin();
                 Reports
             </a>
 
-            <a href="<?php echo $pathPrefix; ?>services.php" class="nav-link flex items-center px-4 py-3 text-gray-300 hover:bg-gray-700 hover:text-white rounded-lg <?php echo (basename($_SERVER['PHP_SELF']) == 'services.php') ? 'active' : ''; ?>">
-                <i class="fas fa-cogs mr-3"></i>
-                Services
+            <a href="<?php echo $pathPrefix; ?>return-items.php" class="nav-link flex items-center px-4 py-3 text-gray-300 hover:bg-gray-700 hover:text-white rounded-lg <?php echo (basename($_SERVER['PHP_SELF']) == 'return-items.php') ? 'active' : ''; ?>">
+                <i class="fas fa-undo mr-3"></i>
+                Return Items
             </a>
             
             <!-- Logout Section -->

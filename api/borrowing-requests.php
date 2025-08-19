@@ -1,14 +1,4 @@
 <?php
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
-
 require_once '../includes/config.php';
 require_once '../includes/auth.php';
 
@@ -18,116 +8,98 @@ checkRememberMe();
 // Require login
 requireLogin();
 
-$currentAdmin = getLoggedInAdmin();
+// Check permission for borrowing management
+if (!hasPermission('borrowing_management')) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'message' => 'Access denied']);
+    exit();
+}
 
-// Get action from various sources
+header('Content-Type: application/json');
+
+// Get action from GET, POST, or JSON body
 $action = $_GET['action'] ?? $_POST['action'] ?? '';
 
-// If action is not found in GET/POST, check JSON body
-if (empty($action) && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    $input = json_decode(file_get_contents('php://input'), true);
-    $action = $input['action'] ?? '';
+// If no action found in GET/POST, try to get it from JSON body
+if (!$action) {
+    $json_input = file_get_contents('php://input');
+    if ($json_input) {
+        $json_data = json_decode($json_input, true);
+        if ($json_data && isset($json_data['action'])) {
+            $action = $json_data['action'];
+        }
+    }
+}
+
+// Add debugging
+error_log("API called with action: " . $action);
+if (!empty($json_input)) {
+    error_log("JSON input received: " . $json_input);
 }
 
 try {
     switch ($action) {
         case 'list':
-            handleListRequests();
+            listBorrowingRequests();
             break;
         case 'get':
-            handleGetRequest();
+            getBorrowingRequest();
             break;
         case 'create':
-            handleCreateRequest();
+            createBorrowingRequest();
             break;
         case 'update':
-            handleUpdateRequest();
+            updateBorrowingRequest();
             break;
         case 'delete':
-            handleDeleteRequest();
+            deleteBorrowingRequest();
+            break;
+        case 'bulk_delete':
+            bulkDeleteBorrowingRequests();
             break;
         case 'approve':
-            handleApproveRequest();
+            approveBorrowingRequest();
             break;
         case 'reject':
-            handleRejectRequest();
-            break;
-        case 'process_borrow':
-            handleProcessBorrow();
-            break;
-        case 'process_return':
-            handleProcessReturn();
-            break;
-        case 'stats':
-            handleGetStats();
-            break;
-        case 'bulk_action':
-            handleBulkAction();
+            rejectBorrowingRequest();
             break;
         case 'export':
-            handleExport();
+            exportBorrowingRequests();
             break;
-        case 'get_items':
-            handleGetRequestItems();
-            break;
-        case 'update_items':
-            handleUpdateRequestItems();
-            break;
-        case 'check_availability':
-            handleCheckAvailability();
-            break;
-        case 'get_overdue':
-            handleGetOverdueRequests();
-            break;
-        case 'get_item_types':
-            handleGetItemTypes();
+        case 'stats':
+            getBorrowingStats();
             break;
         default:
             http_response_code(400);
-            echo json_encode(['success' => false, 'error' => 'Invalid action specified']);
+            echo json_encode(['success' => false, 'message' => 'Invalid or missing action parameter. Action received: ' . $action]);
             break;
     }
 } catch (Exception $e) {
     error_log("Borrowing Requests API Error: " . $e->getMessage());
     http_response_code(500);
-    echo json_encode(['success' => false, 'error' => 'Internal server error occurred']);
+    echo json_encode(['success' => false, 'message' => 'Internal server error']);
 }
 
-function handleListRequests() {
+function listBorrowingRequests() {
     global $pdo;
     
     $page = (int)($_GET['page'] ?? 1);
-    $limit = min((int)($_GET['limit'] ?? 10), 100);
+    $limit = (int)($_GET['limit'] ?? 10);
     $offset = ($page - 1) * $limit;
     
     $search = $_GET['search'] ?? '';
     $status = $_GET['status'] ?? '';
     $customer_id = $_GET['customer_id'] ?? '';
-    $employee_id = $_GET['employee_id'] ?? '';
     $location_id = $_GET['location_id'] ?? '';
     $date_from = $_GET['date_from'] ?? '';
     $date_to = $_GET['date_to'] ?? '';
-    $sort_by = $_GET['sort_by'] ?? 'request_date';
-    $sort_order = $_GET['sort_order'] ?? 'DESC';
-    
-    // Validate sort parameters
-    $validSortColumns = ['request_date', 'status', 'customer_name', 'employee_name', 'required_date', 'id'];
-    $validSortOrders = ['ASC', 'DESC'];
-    
-    if (!in_array($sort_by, $validSortColumns)) {
-        $sort_by = 'request_date';
-    }
-    if (!in_array(strtoupper($sort_order), $validSortOrders)) {
-        $sort_order = 'DESC';
-    }
     
     $whereClause = "WHERE 1=1";
     $params = [];
     
     if (!empty($search)) {
-        $whereClause .= " AND (c.name LIKE :search OR e.name LIKE :search OR br.purpose LIKE :search OR br.id = :search_id)";
+        $whereClause .= " AND (c.name LIKE :search OR br.purpose LIKE :search OR e.name LIKE :search OR l.name LIKE :search)";
         $params['search'] = "%" . $search . "%";
-        $params['search_id'] = is_numeric($search) ? $search : 0;
     }
     
     if (!empty($status)) {
@@ -138,11 +110,6 @@ function handleListRequests() {
     if (!empty($customer_id)) {
         $whereClause .= " AND br.customer_id = :customer_id";
         $params['customer_id'] = $customer_id;
-    }
-    
-    if (!empty($employee_id)) {
-        $whereClause .= " AND br.employee_id = :employee_id";
-        $params['employee_id'] = $employee_id;
     }
     
     if (!empty($location_id)) {
@@ -160,49 +127,40 @@ function handleListRequests() {
         $params['date_to'] = $date_to;
     }
     
-    // Get total count for pagination
-    $countQuery = "SELECT COUNT(*) as total FROM Borrowing_Request br 
-                   LEFT JOIN Customer c ON br.customer_id = c.id 
-                   LEFT JOIN Employee e ON br.employee_id = e.id 
+    // Get total count
+    $countQuery = "SELECT COUNT(*) as total 
+                   FROM Borrowing_Request br 
+                   INNER JOIN Customer c ON br.customer_id = c.id 
+                   INNER JOIN Employee e ON br.employee_id = e.id 
+                   INNER JOIN Location l ON br.location_id = l.id 
                    $whereClause";
+    
     $countStmt = $pdo->prepare($countQuery);
     foreach ($params as $key => $value) {
         $countStmt->bindValue(":$key", $value);
     }
     $countStmt->execute();
-    $totalItems = $countStmt->fetch()['total'];
+    $total = $countStmt->fetch()['total'];
     
-    // Get requests with related data
+    // Get borrowing requests
     $query = "SELECT br.*, 
-                     c.name as customer_name, c.email as customer_email, c.phone as customer_phone,
-                     e.name as employee_name, e.employee_id, e.department,
+                     c.name as customer_name, 
+                     c.customer_type,
+                     e.name as employee_name, 
                      l.name as location_name,
+                     l.city as location_city,
                      a.name as approved_by_name,
-                     COUNT(DISTINCT bi.id) as total_items,
-                     SUM(bi.quantity_requested) as total_quantity_requested,
-                     SUM(bi.quantity_approved) as total_quantity_approved,
-                     SUM(bi.quantity_borrowed) as total_quantity_borrowed,
-                     COUNT(DISTINCT bt.id) as transactions_count
+                     COUNT(bi.id) as total_items
               FROM Borrowing_Request br 
-              LEFT JOIN Customer c ON br.customer_id = c.id 
-              LEFT JOIN Employee e ON br.employee_id = e.id 
-              LEFT JOIN Location l ON br.location_id = l.id
+              INNER JOIN Customer c ON br.customer_id = c.id 
+              INNER JOIN Employee e ON br.employee_id = e.id 
+              INNER JOIN Location l ON br.location_id = l.id 
               LEFT JOIN Admin a ON br.approved_by = a.id
               LEFT JOIN Borrowing_Items bi ON br.id = bi.borrowing_request_id
-              LEFT JOIN Borrowing_Transaction bt ON br.id = bt.borrowing_request_id
               $whereClause 
-              GROUP BY br.id";
-    
-    // Apply sorting
-    if ($sort_by === 'customer_name') {
-        $query .= " ORDER BY c.name $sort_order";
-    } elseif ($sort_by === 'employee_name') {
-        $query .= " ORDER BY e.name $sort_order";
-    } else {
-        $query .= " ORDER BY br.$sort_by $sort_order";
-    }
-    
-    $query .= " LIMIT :limit OFFSET :offset";
+              GROUP BY br.id
+              ORDER BY br.request_date DESC 
+              LIMIT :limit OFFSET :offset";
     
     $stmt = $pdo->prepare($query);
     foreach ($params as $key => $value) {
@@ -212,48 +170,46 @@ function handleListRequests() {
     $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
     $stmt->execute();
     
-    $requests = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
-    // Calculate pagination info
-    $totalPages = ceil($totalItems / $limit);
-    $hasNext = $page < $totalPages;
-    $hasPrev = $page > 1;
+    $requests = $stmt->fetchAll();
     
     echo json_encode([
         'success' => true,
         'data' => $requests,
         'pagination' => [
             'current_page' => $page,
-            'total_pages' => $totalPages,
-            'total_items' => $totalItems,
-            'items_per_page' => $limit,
-            'has_next' => $hasNext,
-            'has_prev' => $hasPrev
+            'total_pages' => ceil($total / $limit),
+            'total_items' => $total,
+            'items_per_page' => $limit
         ]
     ]);
 }
 
-function handleGetRequest() {
+function getBorrowingRequest() {
     global $pdo;
     
-    $id = $_GET['id'] ?? null;
+    $id = $_GET['id'] ?? '';
     if (!$id) {
         http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Request ID is required']);
+        echo json_encode(['success' => false, 'message' => 'ID is required']);
         return;
     }
     
-    // Get request details
     $query = "SELECT br.*, 
-                     c.name as customer_name, c.email as customer_email, c.phone as customer_phone,
-                     c.address as customer_address, c.customer_type, c.contact_person,
-                     e.name as employee_name, e.employee_id, e.department, e.position,
-                     l.name as location_name, l.address as location_address,
+                     c.name as customer_name, 
+                     c.email as customer_email,
+                     c.phone as customer_phone,
+                     c.customer_type,
+                     e.name as employee_name, 
+                     e.email as employee_email,
+                     l.name as location_name,
+                     l.address as location_address,
+                     l.city as location_city,
+                     l.state as location_state,
                      a.name as approved_by_name
               FROM Borrowing_Request br 
-              LEFT JOIN Customer c ON br.customer_id = c.id 
-              LEFT JOIN Employee e ON br.employee_id = e.id 
-              LEFT JOIN Location l ON br.location_id = l.id
+              INNER JOIN Customer c ON br.customer_id = c.id 
+              INNER JOIN Employee e ON br.employee_id = e.id 
+              INNER JOIN Location l ON br.location_id = l.id 
               LEFT JOIN Admin a ON br.approved_by = a.id
               WHERE br.id = :id";
     
@@ -261,1089 +217,527 @@ function handleGetRequest() {
     $stmt->bindValue(':id', $id, PDO::PARAM_INT);
     $stmt->execute();
     
-    $request = $stmt->fetch(PDO::FETCH_ASSOC);
+    $request = $stmt->fetch();
     
     if (!$request) {
         http_response_code(404);
-        echo json_encode(['success' => false, 'error' => 'Request not found']);
+        echo json_encode(['success' => false, 'message' => 'Borrowing request not found']);
         return;
     }
     
-    // Get request items
-    $itemsQuery = "SELECT bi.*, m.name as material_name, m.unit, m.price_per_unit,
-                          mc.name as category_name,
-                          COALESCE(SUM(i.quantity), 0) as available_quantity
-                   FROM Borrowing_Items bi
-                   INNER JOIN Material m ON bi.material_id = m.id
-                   LEFT JOIN Material_Categories mc ON m.category_id = mc.id
-                   LEFT JOIN Inventory i ON m.id = i.material_id AND i.location_id = :location_id
-                   WHERE bi.borrowing_request_id = :request_id
-                   GROUP BY bi.id
-                   ORDER BY m.name";
+    // Get borrowing items
+    $itemsQuery = "SELECT bi.*, bit.name as item_type_name
+                   FROM Borrowing_Items bi 
+                   LEFT JOIN Borrowing_Item_Types bit ON bi.item_type_id = bit.id
+                   WHERE bi.borrowing_request_id = :id";
     
     $itemsStmt = $pdo->prepare($itemsQuery);
-    $itemsStmt->bindValue(':request_id', $id, PDO::PARAM_INT);
-    $itemsStmt->bindValue(':location_id', $request['location_id'], PDO::PARAM_INT);
+    $itemsStmt->bindValue(':id', $id, PDO::PARAM_INT);
     $itemsStmt->execute();
     
-    $request['items'] = $itemsStmt->fetchAll(PDO::FETCH_ASSOC);
-    
-    // Get transactions
-    $transactionsQuery = "SELECT bt.*, e.name as processed_by_name
-                          FROM Borrowing_Transaction bt
-                          LEFT JOIN Employee e ON bt.processed_by = e.id
-                          WHERE bt.borrowing_request_id = :request_id
-                          ORDER BY bt.transaction_date DESC";
-    
-    $transactionsStmt = $pdo->prepare($transactionsQuery);
-    $transactionsStmt->bindValue(':request_id', $id, PDO::PARAM_INT);
-    $transactionsStmt->execute();
-    
-    $request['transactions'] = $transactionsStmt->fetchAll(PDO::FETCH_ASSOC);
-    
-    // Get return items if any
-    if (in_array($request['status'], ['returned', 'active'])) {
-        $returnsQuery = "SELECT ri.*, m.name as material_name, bt.transaction_date
-                         FROM Return_Items ri
-                         INNER JOIN Borrowing_Transaction bt ON ri.borrowing_transaction_id = bt.id
-                         INNER JOIN Material m ON ri.material_id = m.id
-                         WHERE bt.borrowing_request_id = :request_id
-                         ORDER BY ri.return_date DESC";
-        
-        $returnsStmt = $pdo->prepare($returnsQuery);
-        $returnsStmt->bindValue(':request_id', $id, PDO::PARAM_INT);
-        $returnsStmt->execute();
-        
-        $request['returns'] = $returnsStmt->fetchAll(PDO::FETCH_ASSOC);
-    }
+    $request['items'] = $itemsStmt->fetchAll();
     
     echo json_encode(['success' => true, 'data' => $request]);
 }
 
-function handleCreateRequest() {
-    global $pdo, $currentAdmin;
+function createBorrowingRequest() {
+    global $pdo;
     
-    $input = json_decode(file_get_contents('php://input'), true);
+    $raw_input = file_get_contents('php://input');
+    error_log("Create request - Raw input: " . $raw_input);
     
-    $customer_id = $input['customer_id'] ?? null;
-    $employee_id = $input['employee_id'] ?? null;
-    $location_id = $input['location_id'] ?? null;
-    $required_date = $input['required_date'] ?? null;
-    $purpose = trim($input['purpose'] ?? '');
-    $items = $input['items'] ?? [];
-    $notes = trim($input['notes'] ?? '');
+    $data = json_decode($raw_input, true);
     
-    // Validation
-    if (!$customer_id || !$employee_id || !$location_id || empty($purpose) || empty($items)) {
+    if (!$data) {
+        error_log("Create request - JSON decode failed");
         http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Customer, employee, location, purpose, and items are required']);
+        echo json_encode(['success' => false, 'message' => 'Invalid JSON data. Raw input: ' . substr($raw_input, 0, 200)]);
         return;
     }
     
-    // Validate items
-    foreach ($items as $item) {
-        if (!isset($item['item_type_id']) || !isset($item['quantity']) || !isset($item['item_description']) || 
-            $item['quantity'] <= 0 || empty(trim($item['item_description']))) {
+    error_log("Create request - Decoded data: " . print_r($data, true));
+    
+    $required_fields = ['customer_id', 'employee_id', 'location_id', 'required_date', 'purpose'];
+    foreach ($required_fields as $field) {
+        if (empty($data[$field])) {
+            error_log("Create request - Missing field: $field");
             http_response_code(400);
-            echo json_encode(['success' => false, 'error' => 'Invalid item data provided']);
+            echo json_encode(['success' => false, 'message' => "Field '$field' is required. Received data: " . json_encode($data)]);
             return;
         }
     }
     
+    // Validate that referenced entities exist
+    try {
+        // Check customer exists
+        $stmt = $pdo->prepare("SELECT id FROM Customer WHERE id = ? AND status = 'active'");
+        $stmt->execute([$data['customer_id']]);
+        if (!$stmt->fetch()) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Invalid customer ID']);
+            return;
+        }
+        
+        // Check employee exists
+        $stmt = $pdo->prepare("SELECT id FROM Employee WHERE id = ? AND status = 'active'");
+        $stmt->execute([$data['employee_id']]);
+        if (!$stmt->fetch()) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Invalid employee ID']);
+            return;
+        }
+        
+        // Check location exists
+        $stmt = $pdo->prepare("SELECT id FROM Location WHERE id = ?");
+        $stmt->execute([$data['location_id']]);
+        if (!$stmt->fetch()) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Invalid location ID']);
+            return;
+        }
+        
+    } catch (Exception $e) {
+        error_log("Validation error: " . $e->getMessage());
+        http_response_code(500);
+        echo json_encode(['success' => false, 'message' => 'Validation failed']);
+        return;
+    }
+    
     try {
         $pdo->beginTransaction();
         
-        // Create borrowing request
-        $requestQuery = "INSERT INTO Borrowing_Request (customer_id, employee_id, location_id, required_date, purpose, notes, status) 
-                         VALUES (:customer_id, :employee_id, :location_id, :required_date, :purpose, :notes, 'pending')";
-        $requestStmt = $pdo->prepare($requestQuery);
-        $requestStmt->bindValue(':customer_id', $customer_id, PDO::PARAM_INT);
-        $requestStmt->bindValue(':employee_id', $employee_id, PDO::PARAM_INT);
-        $requestStmt->bindValue(':location_id', $location_id, PDO::PARAM_INT);
-        $requestStmt->bindValue(':required_date', $required_date);
-        $requestStmt->bindValue(':purpose', $purpose);
-        $requestStmt->bindValue(':notes', $notes);
-        $requestStmt->execute();
+        $query = "INSERT INTO Borrowing_Request (customer_id, employee_id, location_id, required_date, purpose, status, notes) 
+                  VALUES (:customer_id, :employee_id, :location_id, :required_date, :purpose, :status, :notes)";
+        
+        $stmt = $pdo->prepare($query);
+        $stmt->execute([
+            'customer_id' => $data['customer_id'],
+            'employee_id' => $data['employee_id'],
+            'location_id' => $data['location_id'],
+            'required_date' => $data['required_date'],
+            'purpose' => $data['purpose'],
+            'status' => $data['status'] ?? 'pending',
+            'notes' => $data['notes'] ?? null
+        ]);
         
         $requestId = $pdo->lastInsertId();
         
-        // Add borrowing items
-        $itemQuery = "INSERT INTO Borrowing_Items (borrowing_request_id, item_type_id, item_description, quantity_requested, estimated_value) 
-                      VALUES (:request_id, :item_type_id, :item_description, :quantity, :estimated_value)";
-        $itemStmt = $pdo->prepare($itemQuery);
-        
-        foreach ($items as $item) {
-            // Get item type estimated value
-            $valueQuery = "SELECT estimated_value FROM Borrowing_Item_Types WHERE id = :item_type_id";
-            $valueStmt = $pdo->prepare($valueQuery);
-            $valueStmt->bindValue(':item_type_id', $item['item_type_id'], PDO::PARAM_INT);
-            $valueStmt->execute();
-            $estimatedValue = $valueStmt->fetch()['estimated_value'] ?? 0;
+        // Add items if provided
+        if (!empty($data['items'])) {
+            $itemQuery = "INSERT INTO Borrowing_Items (borrowing_request_id, item_type_id, item_description, quantity_requested, estimated_value) 
+                          VALUES (:request_id, :item_type_id, :item_description, :quantity_requested, :estimated_value)";
+            $itemStmt = $pdo->prepare($itemQuery);
             
-            $itemStmt->bindValue(':request_id', $requestId, PDO::PARAM_INT);
-            $itemStmt->bindValue(':item_type_id', $item['item_type_id'], PDO::PARAM_INT);
-            $itemStmt->bindValue(':item_description', trim($item['item_description']));
-            $itemStmt->bindValue(':quantity', $item['quantity'], PDO::PARAM_INT);
-            $itemStmt->bindValue(':estimated_value', $estimatedValue);
-            $itemStmt->execute();
-        }
-        
-        // Log the activity
-        $logQuery = "INSERT INTO Activity_Log (admin_id, action, description, timestamp) 
-                     VALUES (:admin_id, 'CREATE', :description, NOW())";
-        $logStmt = $pdo->prepare($logQuery);
-        $logStmt->bindValue(':admin_id', $currentAdmin['id']);
-        $logStmt->bindValue(':description', "Created borrowing request #$requestId");
-        $logStmt->execute();
-        
-        $pdo->commit();
-        
-        echo json_encode([
-            'success' => true, 
-            'message' => 'Borrowing request created successfully',
-            'data' => ['id' => $requestId]
-        ]);
-        
-    } catch (Exception $e) {
-        $pdo->rollBack();
-        error_log("Error creating borrowing request: " . $e->getMessage());
-        http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'Failed to create borrowing request']);
-    }
-}
-
-function handleUpdateRequest() {
-    global $pdo, $currentAdmin;
-    
-    $input = json_decode(file_get_contents('php://input'), true);
-    
-    $id = $input['id'] ?? null;
-    $customer_id = $input['customer_id'] ?? null;
-    $employee_id = $input['employee_id'] ?? null;
-    $location_id = $input['location_id'] ?? null;
-    $required_date = $input['required_date'] ?? null;
-    $purpose = trim($input['purpose'] ?? '');
-    $notes = trim($input['notes'] ?? '');
-    
-    if (!$id) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Request ID is required']);
-        return;
-    }
-    
-    // Check if request exists and is editable
-    $checkQuery = "SELECT status FROM Borrowing_Request WHERE id = :id";
-    $checkStmt = $pdo->prepare($checkQuery);
-    $checkStmt->bindValue(':id', $id, PDO::PARAM_INT);
-    $checkStmt->execute();
-    
-    $request = $checkStmt->fetch();
-    if (!$request) {
-        http_response_code(404);
-        echo json_encode(['success' => false, 'error' => 'Request not found']);
-        return;
-    }
-    
-    if (!in_array($request['status'], ['pending', 'approved'])) {
-        http_response_code(409);
-        echo json_encode(['success' => false, 'error' => 'Cannot edit request in current status']);
-        return;
-    }
-    
-    try {
-        $pdo->beginTransaction();
-        
-        $updateQuery = "UPDATE Borrowing_Request SET 
-                        customer_id = :customer_id, 
-                        employee_id = :employee_id, 
-                        location_id = :location_id, 
-                        required_date = :required_date, 
-                        purpose = :purpose, 
-                        notes = :notes
-                        WHERE id = :id";
-        $updateStmt = $pdo->prepare($updateQuery);
-        $updateStmt->bindValue(':customer_id', $customer_id, PDO::PARAM_INT);
-        $updateStmt->bindValue(':employee_id', $employee_id, PDO::PARAM_INT);
-        $updateStmt->bindValue(':location_id', $location_id, PDO::PARAM_INT);
-        $updateStmt->bindValue(':required_date', $required_date);
-        $updateStmt->bindValue(':purpose', $purpose);
-        $updateStmt->bindValue(':notes', $notes);
-        $updateStmt->bindValue(':id', $id, PDO::PARAM_INT);
-        $updateStmt->execute();
-        
-        // Log the activity
-        $logQuery = "INSERT INTO Activity_Log (admin_id, action, description, timestamp) 
-                     VALUES (:admin_id, 'UPDATE', :description, NOW())";
-        $logStmt = $pdo->prepare($logQuery);
-        $logStmt->bindValue(':admin_id', $currentAdmin['id']);
-        $logStmt->bindValue(':description', "Updated borrowing request #$id");
-        $logStmt->execute();
-        
-        $pdo->commit();
-        
-        echo json_encode(['success' => true, 'message' => 'Request updated successfully']);
-        
-    } catch (Exception $e) {
-        $pdo->rollBack();
-        error_log("Error updating borrowing request: " . $e->getMessage());
-        http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'Failed to update request']);
-    }
-}
-
-function handleApproveRequest() {
-    global $pdo, $currentAdmin;
-    
-    $input = json_decode(file_get_contents('php://input'), true);
-    
-    $id = $input['id'] ?? null;
-    $approved_quantities = $input['approved_quantities'] ?? [];
-    $notes = trim($input['notes'] ?? '');
-    
-    if (!$id) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Request ID is required']);
-        return;
-    }
-    
-    // Check if request can be approved
-    $checkQuery = "SELECT status FROM Borrowing_Request WHERE id = :id";
-    $checkStmt = $pdo->prepare($checkQuery);
-    $checkStmt->bindValue(':id', $id, PDO::PARAM_INT);
-    $checkStmt->execute();
-    
-    $request = $checkStmt->fetch();
-    if (!$request) {
-        http_response_code(404);
-        echo json_encode(['success' => false, 'error' => 'Request not found']);
-        return;
-    }
-    
-    if ($request['status'] !== 'pending') {
-        http_response_code(409);
-        echo json_encode(['success' => false, 'error' => 'Request is not in pending status']);
-        return;
-    }
-    
-    try {
-        $pdo->beginTransaction();
-        
-        // Update request status
-        $updateQuery = "UPDATE Borrowing_Request SET 
-                        status = 'approved', 
-                        approved_by = :approved_by, 
-                        approved_date = NOW(),
-                        notes = CONCAT(COALESCE(notes, ''), :notes)
-                        WHERE id = :id";
-        $updateStmt = $pdo->prepare($updateQuery);
-        $updateStmt->bindValue(':approved_by', $currentAdmin['id'], PDO::PARAM_INT);
-        $updateStmt->bindValue(':notes', $notes ? "\n\nApproval Notes: " . $notes : '');
-        $updateStmt->bindValue(':id', $id, PDO::PARAM_INT);
-        $updateStmt->execute();
-        
-        // Update approved quantities for items
-        if (!empty($approved_quantities)) {
-            $itemUpdateQuery = "UPDATE Borrowing_Items SET quantity_approved = :approved_qty WHERE id = :item_id";
-            $itemUpdateStmt = $pdo->prepare($itemUpdateQuery);
-            
-            foreach ($approved_quantities as $item_id => $approved_qty) {
-                $itemUpdateStmt->bindValue(':approved_qty', $approved_qty, PDO::PARAM_INT);
-                $itemUpdateStmt->bindValue(':item_id', $item_id, PDO::PARAM_INT);
-                $itemUpdateStmt->execute();
-            }
-        } else {
-            // If no specific quantities provided, approve all requested quantities
-            $autoApproveQuery = "UPDATE Borrowing_Items SET quantity_approved = quantity_requested WHERE borrowing_request_id = :id";
-            $autoApproveStmt = $pdo->prepare($autoApproveQuery);
-            $autoApproveStmt->bindValue(':id', $id, PDO::PARAM_INT);
-            $autoApproveStmt->execute();
-        }
-        
-        // Log the activity
-        $logQuery = "INSERT INTO Activity_Log (admin_id, action, description, timestamp) 
-                     VALUES (:admin_id, 'UPDATE', :description, NOW())";
-        $logStmt = $pdo->prepare($logQuery);
-        $logStmt->bindValue(':admin_id', $currentAdmin['id']);
-        $logStmt->bindValue(':description', "Approved borrowing request #$id");
-        $logStmt->execute();
-        
-        $pdo->commit();
-        
-        echo json_encode(['success' => true, 'message' => 'Request approved successfully']);
-        
-    } catch (Exception $e) {
-        $pdo->rollBack();
-        error_log("Error approving borrowing request: " . $e->getMessage());
-        http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'Failed to approve request']);
-    }
-}
-
-function handleRejectRequest() {
-    global $pdo, $currentAdmin;
-    
-    $input = json_decode(file_get_contents('php://input'), true);
-    
-    $id = $input['id'] ?? null;
-    $rejection_reason = trim($input['rejection_reason'] ?? '');
-    
-    if (!$id) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Request ID is required']);
-        return;
-    }
-    
-    if (empty($rejection_reason)) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Rejection reason is required']);
-        return;
-    }
-    
-    // Check if request can be rejected
-    $checkQuery = "SELECT status FROM Borrowing_Request WHERE id = :id";
-    $checkStmt = $pdo->prepare($checkQuery);
-    $checkStmt->bindValue(':id', $id, PDO::PARAM_INT);
-    $checkStmt->execute();
-    
-    $request = $checkStmt->fetch();
-    if (!$request) {
-        http_response_code(404);
-        echo json_encode(['success' => false, 'error' => 'Request not found']);
-        return;
-    }
-    
-    if ($request['status'] !== 'pending') {
-        http_response_code(409);
-        echo json_encode(['success' => false, 'error' => 'Request is not in pending status']);
-        return;
-    }
-    
-    try {
-        $pdo->beginTransaction();
-        
-        $updateQuery = "UPDATE Borrowing_Request SET 
-                        status = 'rejected', 
-                        approved_by = :approved_by, 
-                        approved_date = NOW(),
-                        notes = CONCAT(COALESCE(notes, ''), :rejection_notes)
-                        WHERE id = :id";
-        $updateStmt = $pdo->prepare($updateQuery);
-        $updateStmt->bindValue(':approved_by', $currentAdmin['id'], PDO::PARAM_INT);
-        $updateStmt->bindValue(':rejection_notes', "\n\nRejection Reason: " . $rejection_reason);
-        $updateStmt->bindValue(':id', $id, PDO::PARAM_INT);
-        $updateStmt->execute();
-        
-        // Log the activity
-        $logQuery = "INSERT INTO Activity_Log (admin_id, action, description, timestamp) 
-                     VALUES (:admin_id, 'UPDATE', :description, NOW())";
-        $logStmt = $pdo->prepare($logQuery);
-        $logStmt->bindValue(':admin_id', $currentAdmin['id']);
-        $logStmt->bindValue(':description', "Rejected borrowing request #$id");
-        $logStmt->execute();
-        
-        $pdo->commit();
-        
-        echo json_encode(['success' => true, 'message' => 'Request rejected successfully']);
-        
-    } catch (Exception $e) {
-        $pdo->rollBack();
-        error_log("Error rejecting borrowing request: " . $e->getMessage());
-        http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'Failed to reject request']);
-    }
-}
-
-function handleProcessBorrow() {
-    global $pdo, $currentAdmin;
-    
-    $input = json_decode(file_get_contents('php://input'), true);
-    
-    $id = $input['id'] ?? null;
-    $borrowed_quantities = $input['borrowed_quantities'] ?? [];
-    $processed_by = $input['processed_by'] ?? null;
-    $notes = trim($input['notes'] ?? '');
-    
-    if (!$id || empty($borrowed_quantities) || !$processed_by) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Request ID, borrowed quantities, and processor are required']);
-        return;
-    }
-    
-    // Check if request can be processed
-    $checkQuery = "SELECT br.*, l.id as location_id FROM Borrowing_Request br 
-                   LEFT JOIN Location l ON br.location_id = l.id
-                   WHERE br.id = :id AND br.status = 'approved'";
-    $checkStmt = $pdo->prepare($checkQuery);
-    $checkStmt->bindValue(':id', $id, PDO::PARAM_INT);
-    $checkStmt->execute();
-    
-    $request = $checkStmt->fetch();
-    if (!$request) {
-        http_response_code(404);
-        echo json_encode(['success' => false, 'error' => 'Request not found or not approved']);
-        return;
-    }
-    
-    try {
-        $pdo->beginTransaction();
-        
-        // Create borrowing transaction
-        $transactionQuery = "INSERT INTO Borrowing_Transaction (borrowing_request_id, transaction_type, processed_by, notes) 
-                             VALUES (:request_id, 'borrow', :processed_by, :notes)";
-        $transactionStmt = $pdo->prepare($transactionQuery);
-        $transactionStmt->bindValue(':request_id', $id, PDO::PARAM_INT);
-        $transactionStmt->bindValue(':processed_by', $processed_by, PDO::PARAM_INT);
-        $transactionStmt->bindValue(':notes', $notes);
-        $transactionStmt->execute();
-        
-        // Update borrowed quantities and reduce inventory
-        $itemUpdateQuery = "UPDATE Borrowing_Items SET quantity_borrowed = :borrowed_qty WHERE id = :item_id";
-        $itemUpdateStmt = $pdo->prepare($itemUpdateQuery);
-        
-        $inventoryUpdateQuery = "UPDATE Inventory SET quantity = quantity - :quantity 
-                                 WHERE material_id = :material_id AND location_id = :location_id";
-        $inventoryUpdateStmt = $pdo->prepare($inventoryUpdateQuery);
-        
-        foreach ($borrowed_quantities as $item_id => $borrowed_qty) {
-            // Update borrowed quantity
-            $itemUpdateStmt->bindValue(':borrowed_qty', $borrowed_qty, PDO::PARAM_INT);
-            $itemUpdateStmt->bindValue(':item_id', $item_id, PDO::PARAM_INT);
-            $itemUpdateStmt->execute();
-            
-            // Get material ID
-            $materialQuery = "SELECT material_id FROM Borrowing_Items WHERE id = :item_id";
-            $materialStmt = $pdo->prepare($materialQuery);
-            $materialStmt->bindValue(':item_id', $item_id, PDO::PARAM_INT);
-            $materialStmt->execute();
-            $material_id = $materialStmt->fetch()['material_id'];
-            
-            // Update inventory
-            $inventoryUpdateStmt->bindValue(':quantity', $borrowed_qty, PDO::PARAM_INT);
-            $inventoryUpdateStmt->bindValue(':material_id', $material_id, PDO::PARAM_INT);
-            $inventoryUpdateStmt->bindValue(':location_id', $request['location_id'], PDO::PARAM_INT);
-            $inventoryUpdateStmt->execute();
-        }
-        
-        // Update request status to active
-        $statusUpdateQuery = "UPDATE Borrowing_Request SET status = 'active' WHERE id = :id";
-        $statusUpdateStmt = $pdo->prepare($statusUpdateQuery);
-        $statusUpdateStmt->bindValue(':id', $id, PDO::PARAM_INT);
-        $statusUpdateStmt->execute();
-        
-        // Log the activity
-        $logQuery = "INSERT INTO Activity_Log (admin_id, action, description, timestamp) 
-                     VALUES (:admin_id, 'UPDATE', :description, NOW())";
-        $logStmt = $pdo->prepare($logQuery);
-        $logStmt->bindValue(':admin_id', $currentAdmin['id']);
-        $logStmt->bindValue(':description', "Processed borrowing for request #$id");
-        $logStmt->execute();
-        
-        $pdo->commit();
-        
-        echo json_encode(['success' => true, 'message' => 'Borrowing processed successfully']);
-        
-    } catch (Exception $e) {
-        $pdo->rollBack();
-        error_log("Error processing borrowing: " . $e->getMessage());
-        http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'Failed to process borrowing']);
-    }
-}
-
-function handleProcessReturn() {
-    global $pdo, $currentAdmin;
-    
-    $input = json_decode(file_get_contents('php://input'), true);
-    
-    $id = $input['id'] ?? null;
-    $returned_items = $input['returned_items'] ?? [];
-    $processed_by = $input['processed_by'] ?? null;
-    $notes = trim($input['notes'] ?? '');
-    
-    if (!$id || empty($returned_items) || !$processed_by) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Request ID, returned items, and processor are required']);
-        return;
-    }
-    
-    // Check if request can have returns processed
-    $checkQuery = "SELECT br.*, l.id as location_id FROM Borrowing_Request br 
-                   LEFT JOIN Location l ON br.location_id = l.id
-                   WHERE br.id = :id AND br.status = 'active'";
-    $checkStmt = $pdo->prepare($checkQuery);
-    $checkStmt->bindValue(':id', $id, PDO::PARAM_INT);
-    $checkStmt->execute();
-    
-    $request = $checkStmt->fetch();
-    if (!$request) {
-        http_response_code(404);
-        echo json_encode(['success' => false, 'error' => 'Request not found or not active']);
-        return;
-    }
-    
-    try {
-        $pdo->beginTransaction();
-        
-        // Create return transaction
-        $transactionQuery = "INSERT INTO Borrowing_Transaction (borrowing_request_id, transaction_type, processed_by, notes) 
-                             VALUES (:request_id, :transaction_type, :processed_by, :notes)";
-        $transactionStmt = $pdo->prepare($transactionQuery);
-        
-        $isPartialReturn = count($returned_items) < count(array_filter($returned_items, function($item) {
-            return $item['quantity_returned'] > 0;
-        }));
-        
-        $transactionType = $isPartialReturn ? 'partial_return' : 'return';
-        
-        $transactionStmt->bindValue(':request_id', $id, PDO::PARAM_INT);
-        $transactionStmt->bindValue(':transaction_type', $transactionType);
-        $transactionStmt->bindValue(':processed_by', $processed_by, PDO::PARAM_INT);
-        $transactionStmt->bindValue(':notes', $notes);
-        $transactionStmt->execute();
-        
-        $transactionId = $pdo->lastInsertId();
-        
-        // Process each returned item
-        $returnItemQuery = "INSERT INTO Return_Items (borrowing_transaction_id, material_id, quantity_returned, condition_status, damage_notes) 
-                            VALUES (:transaction_id, :material_id, :quantity_returned, :condition_status, :damage_notes)";
-        $returnItemStmt = $pdo->prepare($returnItemQuery);
-        
-        $inventoryUpdateQuery = "UPDATE Inventory SET quantity = quantity + :quantity 
-                                 WHERE material_id = :material_id AND location_id = :location_id";
-        $inventoryUpdateStmt = $pdo->prepare($inventoryUpdateQuery);
-        
-        $allItemsReturned = true;
-        
-        foreach ($returned_items as $item) {
-            $material_id = $item['material_id'];
-            $quantity_returned = $item['quantity_returned'];
-            $condition_status = $item['condition_status'] ?? 'good';
-            $damage_notes = $item['damage_notes'] ?? '';
-            
-            if ($quantity_returned > 0) {
-                // Insert return record
-                $returnItemStmt->bindValue(':transaction_id', $transactionId, PDO::PARAM_INT);
-                $returnItemStmt->bindValue(':material_id', $material_id, PDO::PARAM_INT);
-                $returnItemStmt->bindValue(':quantity_returned', $quantity_returned, PDO::PARAM_INT);
-                $returnItemStmt->bindValue(':condition_status', $condition_status);
-                $returnItemStmt->bindValue(':damage_notes', $damage_notes);
-                $returnItemStmt->execute();
-                
-                // Update inventory only for items in good condition
-                if ($condition_status === 'good') {
-                    $inventoryUpdateStmt->bindValue(':quantity', $quantity_returned, PDO::PARAM_INT);
-                    $inventoryUpdateStmt->bindValue(':material_id', $material_id, PDO::PARAM_INT);
-                    $inventoryUpdateStmt->bindValue(':location_id', $request['location_id'], PDO::PARAM_INT);
-                    $inventoryUpdateStmt->execute();
+            foreach ($data['items'] as $item) {
+                // Validate item data
+                if (empty($item['item_description']) || empty($item['quantity_requested'])) {
+                    throw new Exception('Item description and quantity are required');
                 }
-            }
-            
-            // Check if all items are returned
-            $borrowedQuery = "SELECT quantity_borrowed FROM Borrowing_Items WHERE borrowing_request_id = :request_id AND material_id = :material_id";
-            $borrowedStmt = $pdo->prepare($borrowedQuery);
-            $borrowedStmt->bindValue(':request_id', $id, PDO::PARAM_INT);
-            $borrowedStmt->bindValue(':material_id', $material_id, PDO::PARAM_INT);
-            $borrowedStmt->execute();
-            $borrowed_qty = $borrowedStmt->fetch()['quantity_borrowed'] ?? 0;
-            
-            $returnedQuery = "SELECT SUM(ri.quantity_returned) as total_returned
-                              FROM Return_Items ri
-                              INNER JOIN Borrowing_Transaction bt ON ri.borrowing_transaction_id = bt.id
-                              WHERE bt.borrowing_request_id = :request_id AND ri.material_id = :material_id";
-            $returnedStmt = $pdo->prepare($returnedQuery);
-            $returnedStmt->bindValue(':request_id', $id, PDO::PARAM_INT);
-            $returnedStmt->bindValue(':material_id', $material_id, PDO::PARAM_INT);
-            $returnedStmt->execute();
-            $total_returned = $returnedStmt->fetch()['total_returned'] ?? 0;
-            
-            if ($total_returned < $borrowed_qty) {
-                $allItemsReturned = false;
+                
+                $itemStmt->execute([
+                    'request_id' => $requestId,
+                    'item_type_id' => $item['item_type_id'] ?: null,
+                    'item_description' => $item['item_description'],
+                    'quantity_requested' => (int)$item['quantity_requested'],
+                    'estimated_value' => (float)($item['estimated_value'] ?: 0)
+                ]);
             }
         }
         
-        // Update request status if all items are returned
-        if ($allItemsReturned && !$isPartialReturn) {
-            $statusUpdateQuery = "UPDATE Borrowing_Request SET status = 'returned' WHERE id = :id";
-            $statusUpdateStmt = $pdo->prepare($statusUpdateQuery);
-            $statusUpdateStmt->bindValue(':id', $id, PDO::PARAM_INT);
-            $statusUpdateStmt->execute();
-        }
-        
-        // Log the activity
-        $logQuery = "INSERT INTO Activity_Log (admin_id, action, description, timestamp) 
-                     VALUES (:admin_id, 'UPDATE', :description, NOW())";
-        $logStmt = $pdo->prepare($logQuery);
-        $logStmt->bindValue(':admin_id', $currentAdmin['id']);
-        $logStmt->bindValue(':description', "Processed return for request #$id");
-        $logStmt->execute();
+        // Log activity
+        logActivity($pdo, 'CREATE', "Created borrowing request ID: $requestId");
         
         $pdo->commit();
         
-        echo json_encode(['success' => true, 'message' => 'Return processed successfully']);
+        echo json_encode(['success' => true, 'message' => 'Borrowing request created successfully', 'id' => $requestId]);
         
     } catch (Exception $e) {
         $pdo->rollBack();
-        error_log("Error processing return: " . $e->getMessage());
+        error_log("Create borrowing request error: " . $e->getMessage());
         http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'Failed to process return']);
+        echo json_encode(['success' => false, 'message' => 'Failed to create borrowing request: ' . $e->getMessage()]);
     }
 }
 
-function handleDeleteRequest() {
-    global $pdo, $currentAdmin;
-    
-    $id = $_POST['id'] ?? $_GET['id'] ?? null;
-    if (!$id) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Request ID is required']);
-        return;
-    }
-    
-    // Check if request can be deleted
-    $checkQuery = "SELECT status FROM Borrowing_Request WHERE id = :id";
-    $checkStmt = $pdo->prepare($checkQuery);
-    $checkStmt->bindValue(':id', $id, PDO::PARAM_INT);
-    $checkStmt->execute();
-    
-    $request = $checkStmt->fetch();
-    if (!$request) {
-        http_response_code(404);
-        echo json_encode(['success' => false, 'error' => 'Request not found']);
-        return;
-    }
-    
-    if (in_array($request['status'], ['active', 'overdue'])) {
-        http_response_code(409);
-        echo json_encode(['success' => false, 'error' => 'Cannot delete active or overdue requests']);
-        return;
-    }
-    
-    try {
-        $pdo->beginTransaction();
-        
-        // Delete related records in correct order
-        $pdo->prepare("DELETE FROM Return_Items WHERE borrowing_transaction_id IN 
-                       (SELECT id FROM Borrowing_Transaction WHERE borrowing_request_id = :id)")->execute([':id' => $id]);
-        $pdo->prepare("DELETE FROM Borrowing_Transaction WHERE borrowing_request_id = :id")->execute([':id' => $id]);
-        $pdo->prepare("DELETE FROM Borrowing_Items WHERE borrowing_request_id = :id")->execute([':id' => $id]);
-        $pdo->prepare("DELETE FROM Borrowing_Request WHERE id = :id")->execute([':id' => $id]);
-        
-        // Log the activity
-        $logQuery = "INSERT INTO Activity_Log (admin_id, action, description, timestamp) 
-                     VALUES (:admin_id, 'DELETE', :description, NOW())";
-        $logStmt = $pdo->prepare($logQuery);
-        $logStmt->bindValue(':admin_id', $currentAdmin['id']);
-        $logStmt->bindValue(':description', "Deleted borrowing request #$id");
-        $logStmt->execute();
-        
-        $pdo->commit();
-        
-        echo json_encode(['success' => true, 'message' => 'Request deleted successfully']);
-        
-    } catch (Exception $e) {
-        $pdo->rollBack();
-        error_log("Error deleting borrowing request: " . $e->getMessage());
-        http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'Failed to delete request']);
-    }
-}
-
-function handleGetStats() {
+function updateBorrowingRequest() {
     global $pdo;
     
-    try {
-        // Total requests
-        $totalQuery = "SELECT COUNT(*) as total FROM Borrowing_Request";
-        $totalStmt = $pdo->query($totalQuery);
-        $totalRequests = $totalStmt->fetch()['total'];
-        
-        // Status breakdown
-        $statusQuery = "SELECT status, COUNT(*) as count FROM Borrowing_Request GROUP BY status";
-        $statusStmt = $pdo->query($statusQuery);
-        $statusBreakdown = [];
-        while ($row = $statusStmt->fetch()) {
-            $statusBreakdown[$row['status']] = (int)$row['count'];
-        }
-        
-        // Recent activity
-        $recentQuery = "SELECT COUNT(*) as today FROM Borrowing_Request WHERE DATE(request_date) = CURDATE()";
-        $recentStmt = $pdo->query($recentQuery);
-        $todayRequests = $recentStmt->fetch()['today'];
-        
-        $weekQuery = "SELECT COUNT(*) as week FROM Borrowing_Request WHERE WEEK(request_date) = WEEK(NOW()) AND YEAR(request_date) = YEAR(NOW())";
-        $weekStmt = $pdo->query($weekQuery);
-        $weekRequests = $weekStmt->fetch()['week'];
-        
-        // Overdue requests
-        $overdueQuery = "SELECT COUNT(*) as overdue FROM Borrowing_Request 
-                         WHERE status = 'active' AND required_date < CURDATE()";
-        $overdueStmt = $pdo->query($overdueQuery);
-        $overdueRequests = $overdueStmt->fetch()['overdue'];
-        
-        // Top customers
-        $topCustomersQuery = "SELECT c.name, COUNT(br.id) as request_count 
-                              FROM Customer c 
-                              INNER JOIN Borrowing_Request br ON c.id = br.customer_id 
-                              GROUP BY c.id, c.name 
-                              ORDER BY request_count DESC 
-                              LIMIT 5";
-        $topCustomersStmt = $pdo->query($topCustomersQuery);
-        $topCustomers = $topCustomersStmt->fetchAll(PDO::FETCH_ASSOC);
-        
-        echo json_encode([
-            'success' => true,
-            'data' => [
-                'total_requests' => (int)$totalRequests,
-                'status_breakdown' => $statusBreakdown,
-                'today_requests' => (int)$todayRequests,
-                'week_requests' => (int)$weekRequests,
-                'overdue_requests' => (int)$overdueRequests,
-                'top_customers' => $topCustomers
-            ]
-        ]);
-        
-    } catch (Exception $e) {
-        error_log("Error getting borrowing request stats: " . $e->getMessage());
-        http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'Failed to retrieve statistics']);
-    }
-}
-
-function handleBulkAction() {
-    global $pdo, $currentAdmin;
+    $data = json_decode(file_get_contents('php://input'), true);
     
-    $input = json_decode(file_get_contents('php://input'), true);
-    $action = $input['action'] ?? '';
-    $request_ids = $input['request_ids'] ?? [];
-    
-    if (empty($action) || empty($request_ids)) {
+    if (!$data || empty($data['id'])) {
         http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Action and request IDs are required']);
+        echo json_encode(['success' => false, 'message' => 'ID is required']);
         return;
     }
     
     try {
         $pdo->beginTransaction();
         
-        $successCount = 0;
-        $errors = [];
+        $query = "UPDATE Borrowing_Request SET 
+                    customer_id = :customer_id, 
+                    employee_id = :employee_id, 
+                    location_id = :location_id, 
+                    required_date = :required_date, 
+                    purpose = :purpose, 
+                    status = :status, 
+                    notes = :notes 
+                  WHERE id = :id";
         
-        foreach ($request_ids as $id) {
-            try {
-                switch ($action) {
-                    case 'approve':
-                        $stmt = $pdo->prepare("UPDATE Borrowing_Request SET status = 'approved', approved_by = :admin_id, approved_date = NOW() WHERE id = :id AND status = 'pending'");
-                        $stmt->execute([':admin_id' => $currentAdmin['id'], ':id' => $id]);
-                        break;
-                    case 'reject':
-                        $stmt = $pdo->prepare("UPDATE Borrowing_Request SET status = 'rejected', approved_by = :admin_id, approved_date = NOW() WHERE id = :id AND status = 'pending'");
-                        $stmt->execute([':admin_id' => $currentAdmin['id'], ':id' => $id]);
-                        break;
-                    case 'delete':
-                        // Check if deletable
-                        $checkStmt = $pdo->prepare("SELECT status FROM Borrowing_Request WHERE id = :id");
-                        $checkStmt->execute([':id' => $id]);
-                        $status = $checkStmt->fetch()['status'];
-                        
-                        if (!in_array($status, ['active', 'overdue'])) {
-                            // Delete related records
-                            $pdo->prepare("DELETE FROM Return_Items WHERE borrowing_transaction_id IN (SELECT id FROM Borrowing_Transaction WHERE borrowing_request_id = :id)")->execute([':id' => $id]);
-                            $pdo->prepare("DELETE FROM Borrowing_Transaction WHERE borrowing_request_id = :id")->execute([':id' => $id]);
-                            $pdo->prepare("DELETE FROM Borrowing_Items WHERE borrowing_request_id = :id")->execute([':id' => $id]);
-                            $pdo->prepare("DELETE FROM Borrowing_Request WHERE id = :id")->execute([':id' => $id]);
-                        } else {
-                            $errors[] = "Request #$id cannot be deleted (active/overdue)";
-                            continue 2;
-                        }
-                        break;
-                    default:
-                        $errors[] = "Invalid action: $action";
-                        continue 2;
-                }
-                $successCount++;
-            } catch (Exception $e) {
-                $errors[] = "Failed to process request #$id: " . $e->getMessage();
-            }
-        }
+        $stmt = $pdo->prepare($query);
+        $stmt->execute([
+            'id' => $data['id'],
+            'customer_id' => $data['customer_id'],
+            'employee_id' => $data['employee_id'],
+            'location_id' => $data['location_id'],
+            'required_date' => $data['required_date'],
+            'purpose' => $data['purpose'],
+            'status' => $data['status'],
+            'notes' => $data['notes'] ?? null
+        ]);
         
-        // Log the activity
-        $logQuery = "INSERT INTO Activity_Log (admin_id, action, description, timestamp) 
-                     VALUES (:admin_id, 'BULK_UPDATE', :description, NOW())";
-        $logStmt = $pdo->prepare($logQuery);
-        $logStmt->bindValue(':admin_id', $currentAdmin['id']);
-        $logStmt->bindValue(':description', "Bulk $action on $successCount requests");
-        $logStmt->execute();
+        // Log activity
+        logActivity($pdo, 'UPDATE', "Updated borrowing request ID: {$data['id']}");
         
         $pdo->commit();
         
-        echo json_encode([
-            'success' => true,
-            'message' => "$successCount requests processed successfully",
-            'success_count' => $successCount,
-            'errors' => $errors
-        ]);
+        echo json_encode(['success' => true, 'message' => 'Borrowing request updated successfully']);
         
     } catch (Exception $e) {
         $pdo->rollBack();
-        error_log("Error in bulk action: " . $e->getMessage());
+        error_log("Update borrowing request error: " . $e->getMessage());
         http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'Failed to process bulk action']);
+        echo json_encode(['success' => false, 'message' => 'Failed to update borrowing request']);
     }
 }
 
-function handleExport() {
+function deleteBorrowingRequest() {
+    global $pdo;
+    
+    // Handle both POST form data and JSON data
+    $data = json_decode(file_get_contents('php://input'), true);
+    $id = $data['id'] ?? $_POST['id'] ?? $_GET['id'] ?? '';
+    
+    if (!$id) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'message' => 'ID is required']);
+        return;
+    }
+    
+    try {
+        $pdo->beginTransaction();
+        
+        // Delete borrowing items first
+        $stmt = $pdo->prepare("DELETE FROM Borrowing_Items WHERE borrowing_request_id = ?");
+        $stmt->execute([$id]);
+        
+        // Delete borrowing request
+        $stmt = $pdo->prepare("DELETE FROM Borrowing_Request WHERE id = ?");
+        $stmt->execute([$id]);
+        
+        if ($stmt->rowCount() === 0) {
+            $pdo->rollBack();
+            http_response_code(404);
+            echo json_encode(['success' => false, 'message' => 'Borrowing request not found']);
+            return;
+        }
+        
+        // Log activity
+        logActivity($pdo, 'DELETE', "Deleted borrowing request ID: $id");
+        
+        $pdo->commit();
+        
+        echo json_encode(['success' => true, 'message' => 'Borrowing request deleted successfully']);
+        
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        error_log("Delete borrowing request error: " . $e->getMessage());
+        http_response_code(500);
+        echo json_encode(['success' => false, 'message' => 'Failed to delete borrowing request']);
+    }
+}
+
+function bulkDeleteBorrowingRequests() {
+    global $pdo;
+    
+    $data = json_decode(file_get_contents('php://input'), true);
+    $ids = $data['ids'] ?? [];
+    
+    if (empty($ids)) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'message' => 'No IDs provided']);
+        return;
+    }
+    
+    try {
+        $pdo->beginTransaction();
+        
+        $placeholders = str_repeat('?,', count($ids) - 1) . '?';
+        
+        // Delete borrowing items first
+        $stmt = $pdo->prepare("DELETE FROM Borrowing_Items WHERE borrowing_request_id IN ($placeholders)");
+        $stmt->execute($ids);
+        
+        // Delete borrowing requests
+        $stmt = $pdo->prepare("DELETE FROM Borrowing_Request WHERE id IN ($placeholders)");
+        $stmt->execute($ids);
+        
+        $deletedCount = $stmt->rowCount();
+        
+        // Log activity
+        logActivity($pdo, 'BULK_DELETE', "Bulk deleted $deletedCount borrowing requests");
+        
+        $pdo->commit();
+        
+        echo json_encode(['success' => true, 'message' => "$deletedCount borrowing requests deleted successfully"]);
+        
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        error_log("Bulk delete borrowing requests error: " . $e->getMessage());
+        http_response_code(500);
+        echo json_encode(['success' => false, 'message' => 'Failed to delete borrowing requests']);
+    }
+}
+
+function approveBorrowingRequest() {
+    global $pdo;
+    
+    $raw_input = file_get_contents('php://input');
+    error_log("Approve request - Raw input: " . $raw_input);
+    
+    $data = json_decode($raw_input, true);
+    error_log("Approve request - Decoded data: " . print_r($data, true));
+    
+    $id = $data['id'] ?? '';
+    
+    if (!$id) {
+        error_log("Approve request - No ID provided");
+        http_response_code(400);
+        echo json_encode(['success' => false, 'message' => 'ID is required. Received data: ' . json_encode($data)]);
+        return;
+    }
+    
+    $currentAdmin = getLoggedInAdmin();
+    
+    if (!$currentAdmin) {
+        error_log("Approve request - No current admin");
+        http_response_code(401);
+        echo json_encode(['success' => false, 'message' => 'User not authenticated']);
+        return;
+    }
+    
+    try {
+        // First check if the request exists and is in pending status
+        $checkStmt = $pdo->prepare("SELECT status FROM Borrowing_Request WHERE id = ?");
+        $checkStmt->execute([$id]);
+        $request = $checkStmt->fetch();
+        
+        if (!$request) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'message' => 'Borrowing request not found']);
+            return;
+        }
+        
+        if ($request['status'] !== 'pending') {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Only pending requests can be approved']);
+            return;
+        }
+        
+        $stmt = $pdo->prepare("UPDATE Borrowing_Request SET status = 'approved', approved_by = ?, approved_date = NOW() WHERE id = ?");
+        $stmt->execute([$currentAdmin['id'], $id]);
+        
+        if ($stmt->rowCount() === 0) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'message' => 'Failed to update borrowing request']);
+            return;
+        }
+        
+        // Log activity
+        logActivity($pdo, 'APPROVE', "Approved borrowing request ID: $id");
+        
+        echo json_encode(['success' => true, 'message' => 'Borrowing request approved successfully']);
+        
+    } catch (Exception $e) {
+        error_log("Approve borrowing request error: " . $e->getMessage());
+        http_response_code(500);
+        echo json_encode(['success' => false, 'message' => 'Failed to approve borrowing request: ' . $e->getMessage()]);
+    }
+}
+
+function rejectBorrowingRequest() {
+    global $pdo;
+    
+    $raw_input = file_get_contents('php://input');
+    error_log("Reject request - Raw input: " . $raw_input);
+    
+    $data = json_decode($raw_input, true);
+    error_log("Reject request - Decoded data: " . print_r($data, true));
+    
+    $id = $data['id'] ?? '';
+    $notes = $data['notes'] ?? '';
+    
+    if (!$id) {
+        error_log("Reject request - No ID provided");
+        http_response_code(400);
+        echo json_encode(['success' => false, 'message' => 'ID is required. Received data: ' . json_encode($data)]);
+        return;
+    }
+    
+    $currentAdmin = getLoggedInAdmin();
+    
+    if (!$currentAdmin) {
+        error_log("Reject request - No current admin");
+        http_response_code(401);
+        echo json_encode(['success' => false, 'message' => 'User not authenticated']);
+        return;
+    }
+    
+    try {
+        // First check if the request exists and is in pending status
+        $checkStmt = $pdo->prepare("SELECT status FROM Borrowing_Request WHERE id = ?");
+        $checkStmt->execute([$id]);
+        $request = $checkStmt->fetch();
+        
+        if (!$request) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'message' => 'Borrowing request not found']);
+            return;
+        }
+        
+        if ($request['status'] !== 'pending') {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Only pending requests can be rejected']);
+            return;
+        }
+        
+        $stmt = $pdo->prepare("UPDATE Borrowing_Request SET status = 'rejected', approved_by = ?, approved_date = NOW(), notes = ? WHERE id = ?");
+        $stmt->execute([$currentAdmin['id'], $notes, $id]);
+        
+        if ($stmt->rowCount() === 0) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'message' => 'Failed to update borrowing request']);
+            return;
+        }
+        
+        // Log activity
+        logActivity($pdo, 'REJECT', "Rejected borrowing request ID: $id");
+        
+        echo json_encode(['success' => true, 'message' => 'Borrowing request rejected successfully']);
+        
+    } catch (Exception $e) {
+        error_log("Reject borrowing request error: " . $e->getMessage());
+        http_response_code(500);
+        echo json_encode(['success' => false, 'message' => 'Failed to reject borrowing request: ' . $e->getMessage()]);
+    }
+}
+
+function exportBorrowingRequests() {
     global $pdo;
     
     $format = $_GET['format'] ?? 'csv';
-    $request_ids = $_GET['request_ids'] ?? null;
+    $ids = $_GET['request_ids'] ?? '';
     
-    $whereClause = "";
+    $whereClause = "WHERE 1=1";
     $params = [];
     
-    if ($request_ids) {
-        $ids = explode(',', $request_ids);
-        $ids = array_filter($ids, 'is_numeric');
-        if (!empty($ids)) {
-            $placeholders = str_repeat('?,', count($ids) - 1) . '?';
-            $whereClause = "WHERE br.id IN ($placeholders)";
-            $params = $ids;
-        }
+    if (!empty($ids)) {
+        $idArray = explode(',', $ids);
+        $placeholders = str_repeat('?,', count($idArray) - 1) . '?';
+        $whereClause .= " AND br.id IN ($placeholders)";
+        $params = $idArray;
     }
     
-    $query = "SELECT br.*, 
-                     c.name as customer_name, c.email as customer_email,
-                     e.name as employee_name, e.employee_id,
-                     l.name as location_name,
-                     a.name as approved_by_name
+    $query = "SELECT br.id, br.request_date, br.required_date, br.purpose, br.status, br.notes,
+                     c.name as customer_name, c.customer_type,
+                     e.name as employee_name,
+                     l.name as location_name, l.city as location_city,
+                     a.name as approved_by_name, br.approved_date
               FROM Borrowing_Request br 
-              LEFT JOIN Customer c ON br.customer_id = c.id 
-              LEFT JOIN Employee e ON br.employee_id = e.id 
-              LEFT JOIN Location l ON br.location_id = l.id
+              INNER JOIN Customer c ON br.customer_id = c.id 
+              INNER JOIN Employee e ON br.employee_id = e.id 
+              INNER JOIN Location l ON br.location_id = l.id 
               LEFT JOIN Admin a ON br.approved_by = a.id
-              $whereClause
+              $whereClause 
               ORDER BY br.request_date DESC";
     
     $stmt = $pdo->prepare($query);
     $stmt->execute($params);
-    $requests = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $requests = $stmt->fetchAll();
     
     if ($format === 'csv') {
         header('Content-Type: text/csv');
-        header('Content-Disposition: attachment; filename="borrowing_requests_export_' . date('Y-m-d_H-i-s') . '.csv"');
+        header('Content-Disposition: attachment; filename="borrowing_requests.csv"');
         
         $output = fopen('php://output', 'w');
         
-        // CSV Headers
+        // CSV headers
         fputcsv($output, [
-            'ID', 'Customer', 'Employee', 'Location', 'Request Date', 'Required Date',
-            'Status', 'Purpose', 'Approved By', 'Approved Date', 'Notes'
+            'ID', 'Request Date', 'Required Date', 'Customer', 'Customer Type', 
+            'Employee', 'Location', 'Purpose', 'Status', 'Approved By', 
+            'Approved Date', 'Notes'
         ]);
         
-        // CSV Data
+        // CSV data
         foreach ($requests as $request) {
             fputcsv($output, [
                 $request['id'],
-                $request['customer_name'],
-                $request['employee_name'] . ' (' . $request['employee_id'] . ')',
-                $request['location_name'],
                 $request['request_date'],
-                $request['required_date'] ?? '',
-                $request['status'],
+                $request['required_date'],
+                $request['customer_name'],
+                $request['customer_type'],
+                $request['employee_name'],
+                $request['location_name'] . ', ' . $request['location_city'],
                 $request['purpose'],
-                $request['approved_by_name'] ?? '',
-                $request['approved_date'] ?? '',
-                $request['notes'] ?? ''
+                ucfirst($request['status']),
+                $request['approved_by_name'],
+                $request['approved_date'],
+                $request['notes']
             ]);
         }
         
         fclose($output);
     } else {
-        // JSON format
-        header('Content-Type: application/json');
-        header('Content-Disposition: attachment; filename="borrowing_requests_export_' . date('Y-m-d_H-i-s') . '.json"');
-        
-        echo json_encode([
-            'export_date' => date('Y-m-d H:i:s'),
-            'total_requests' => count($requests),
-            'data' => $requests
-        ], JSON_PRETTY_PRINT);
+        echo json_encode(['success' => true, 'data' => $requests]);
     }
 }
 
-function handleGetRequestItems() {
+function getBorrowingStats() {
     global $pdo;
     
-    $request_id = $_GET['request_id'] ?? null;
-    if (!$request_id) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Request ID is required']);
-        return;
-    }
+    $stats = [];
     
-    $query = "SELECT bi.*, m.name as material_name, m.unit, m.price_per_unit,
-                     mc.name as category_name,
-                     COALESCE(SUM(i.quantity), 0) as available_quantity
-              FROM Borrowing_Items bi
-              INNER JOIN Material m ON bi.material_id = m.id
-              LEFT JOIN Material_Categories mc ON m.category_id = mc.id
-              LEFT JOIN Inventory i ON m.id = i.material_id
-              WHERE bi.borrowing_request_id = :request_id
-              GROUP BY bi.id
-              ORDER BY m.name";
+    // Total requests
+    $stmt = $pdo->query("SELECT COUNT(*) as total FROM Borrowing_Request");
+    $stats['total_requests'] = $stmt->fetch()['total'] ?? 0;
     
-    $stmt = $pdo->prepare($query);
-    $stmt->bindValue(':request_id', $request_id, PDO::PARAM_INT);
-    $stmt->execute();
+    // Pending requests
+    $stmt = $pdo->query("SELECT COUNT(*) as pending FROM Borrowing_Request WHERE status = 'pending'");
+    $stats['pending_requests'] = $stmt->fetch()['pending'] ?? 0;
     
-    $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    // Approved requests
+    $stmt = $pdo->query("SELECT COUNT(*) as approved FROM Borrowing_Request WHERE status = 'approved'");
+    $stats['approved_requests'] = $stmt->fetch()['approved'] ?? 0;
     
-    echo json_encode(['success' => true, 'data' => $items]);
+    // Active borrowings
+    $stmt = $pdo->query("SELECT COUNT(*) as active FROM Borrowing_Request WHERE status = 'active'");
+    $stats['active_borrowings'] = $stmt->fetch()['active'] ?? 0;
+    
+    // Overdue returns
+    $stmt = $pdo->query("SELECT COUNT(*) as overdue FROM Borrowing_Request WHERE status = 'overdue'");
+    $stats['overdue_returns'] = $stmt->fetch()['overdue'] ?? 0;
+    
+    // Recent activity (last 7 days)
+    $stmt = $pdo->query("SELECT COUNT(*) as recent FROM Borrowing_Request WHERE request_date >= DATE_SUB(NOW(), INTERVAL 7 DAY)");
+    $stats['recent_requests'] = $stmt->fetch()['recent'] ?? 0;
+    
+    echo json_encode(['success' => true, 'data' => $stats]);
 }
 
-function handleUpdateRequestItems() {
-    global $pdo, $currentAdmin;
-    
-    $input = json_decode(file_get_contents('php://input'), true);
-    
-    $request_id = $input['request_id'] ?? null;
-    $items = $input['items'] ?? [];
-    
-    if (!$request_id || empty($items)) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Request ID and items are required']);
-        return;
-    }
-    
-    try {
-        $pdo->beginTransaction();
-        
-        // Delete existing items
-        $deleteQuery = "DELETE FROM Borrowing_Items WHERE borrowing_request_id = :request_id";
-        $deleteStmt = $pdo->prepare($deleteQuery);
-        $deleteStmt->bindValue(':request_id', $request_id, PDO::PARAM_INT);
-        $deleteStmt->execute();
-        
-        // Insert updated items
-        $insertQuery = "INSERT INTO Borrowing_Items (borrowing_request_id, material_id, quantity_requested, quantity_approved, unit_price) 
-                        VALUES (:request_id, :material_id, :quantity_requested, :quantity_approved, :unit_price)";
-        $insertStmt = $pdo->prepare($insertQuery);
-        
-        foreach ($items as $item) {
-            $insertStmt->bindValue(':request_id', $request_id, PDO::PARAM_INT);
-            $insertStmt->bindValue(':material_id', $item['material_id'], PDO::PARAM_INT);
-            $insertStmt->bindValue(':quantity_requested', $item['quantity_requested'], PDO::PARAM_INT);
-            $insertStmt->bindValue(':quantity_approved', $item['quantity_approved'] ?? null);
-            $insertStmt->bindValue(':unit_price', $item['unit_price']);
-            $insertStmt->execute();
-        }
-        
-        // Log the activity
-        $logQuery = "INSERT INTO Activity_Log (admin_id, action, description, timestamp) 
-                     VALUES (:admin_id, 'UPDATE', :description, NOW())";
-        $logStmt = $pdo->prepare($logQuery);
-        $logStmt->bindValue(':admin_id', $currentAdmin['id']);
-        $logStmt->bindValue(':description', "Updated items for borrowing request #$request_id");
-        $logStmt->execute();
-        
-        $pdo->commit();
-        
-        echo json_encode(['success' => true, 'message' => 'Request items updated successfully']);
-        
-    } catch (Exception $e) {
-        $pdo->rollBack();
-        error_log("Error updating request items: " . $e->getMessage());
-        http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'Failed to update request items']);
+function logActivity($pdo, $action, $description) {
+    $currentAdmin = getLoggedInAdmin();
+    if ($currentAdmin) {
+        $stmt = $pdo->prepare("INSERT INTO Activity_Log (admin_id, action, description) VALUES (?, ?, ?)");
+        $stmt->execute([$currentAdmin['id'], $action, $description]);
     }
 }
-
-function handleCheckAvailability() {
-    global $pdo;
-    
-    $material_id = $_GET['material_id'] ?? null;
-    $location_id = $_GET['location_id'] ?? null;
-    $quantity = $_GET['quantity'] ?? 0;
-    
-    if (!$material_id || !$location_id) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Material ID and location ID are required']);
-        return;
-    }
-    
-    $query = "SELECT COALESCE(SUM(quantity), 0) as available_quantity
-              FROM Inventory 
-              WHERE material_id = :material_id AND location_id = :location_id";
-    
-    $stmt = $pdo->prepare($query);
-    $stmt->bindValue(':material_id', $material_id, PDO::PARAM_INT);
-    $stmt->bindValue(':location_id', $location_id, PDO::PARAM_INT);
-    $stmt->execute();
-    
-    $available = $stmt->fetch()['available_quantity'];
-    $isAvailable = $available >= $quantity;
-    
-    echo json_encode([
-        'success' => true,
-        'data' => [
-            'available_quantity' => (int)$available,
-            'requested_quantity' => (int)$quantity,
-            'is_available' => $isAvailable,
-            'shortage' => $isAvailable ? 0 : ($quantity - $available)
-        ]
-    ]);
-}
-
-function handleGetOverdueRequests() {
-    global $pdo;
-    
-    $query = "SELECT br.*, c.name as customer_name, e.name as employee_name,
-                     DATEDIFF(CURDATE(), br.required_date) as days_overdue
-              FROM Borrowing_Request br
-              LEFT JOIN Customer c ON br.customer_id = c.id
-              LEFT JOIN Employee e ON br.employee_id = e.id
-              WHERE br.status = 'active' AND br.required_date < CURDATE()
-              ORDER BY br.required_date ASC";
-    
-    $stmt = $pdo->query($query);
-    $overdueRequests = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
-    // Update status to overdue
-    if (!empty($overdueRequests)) {
-        $updateQuery = "UPDATE Borrowing_Request SET status = 'overdue' 
-                        WHERE status = 'active' AND required_date < CURDATE()";
-        $pdo->query($updateQuery);
-    }
-    
-    echo json_encode([
-        'success' => true,
-        'data' => $overdueRequests
-    ]);
-}
-
-function handleGetItemTypes() {
-    global $pdo;
-    
-    try {
-        $query = "SELECT id, name, description, unit, estimated_value 
-                  FROM Borrowing_Item_Types 
-                  ORDER BY name ASC";
-        
-        $stmt = $pdo->query($query);
-        $itemTypes = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
-        echo json_encode([
-            'success' => true,
-            'data' => $itemTypes
-        ]);
-        
-    } catch (Exception $e) {
-        error_log("Error fetching item types: " . $e->getMessage());
-        http_response_code(500);
-        echo json_encode([
-            'success' => false, 
-            'error' => 'Failed to fetch item types'
-        ]);
-    }
-}
-?>
 ?>

@@ -18,15 +18,31 @@ checkRememberMe();
 // Require login
 requireLogin();
 
-// Check permission for inventory management
-if (!hasPermission('inventory_management')) {
+// Check permission for borrowing management
+if (!hasPermission('borrowing_management')) {
     http_response_code(403);
     echo json_encode(['success' => false, 'error' => 'Access denied. Insufficient permissions.']);
     exit();
 }
 
 $currentAdmin = getLoggedInAdmin();
-$action = $_GET['action'] ?? $_POST['action'] ?? '';
+
+// Get action from JSON input for POST requests, or from query params for GET
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $action = $input['action'] ?? $_POST['action'] ?? '';
+} else {
+    $action = $_GET['action'] ?? '';
+}
+
+if (empty($action)) {
+    http_response_code(400);
+    echo json_encode([
+        'success' => false, 
+        'error' => 'No action specified'
+    ]);
+    exit();
+}
 
 try {
     switch ($action) {
