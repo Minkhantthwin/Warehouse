@@ -21,7 +21,7 @@ $currentAdmin = getLoggedInAdmin();
     <!-- Fixed Header -->
     <div class="flex items-center justify-center h-16 bg-secondary flex-shrink-0">
         <i class="fas fa-warehouse text-2xl mr-2"></i>
-        <span class="text-xl font-bold">Warehouse Admin</span>
+        <span class="text-xl font-bold">VAULT-X</span>
     </div>
     
     <!-- Fixed User Info -->
@@ -85,7 +85,7 @@ $currentAdmin = getLoggedInAdmin();
 
             <a href="<?php echo $pathPrefix; ?>borrowing-items.php" class="nav-link flex items-center px-4 py-3 text-gray-300 hover:bg-gray-700 hover:text-white rounded-lg <?php echo (basename($_SERVER['PHP_SELF']) == 'borrowing-items.php') ? 'active' : ''; ?>">
                 <i class="fas fa-boxes mr-3"></i>
-                Borrowing Items
+                Items
             </a>
 
             <a href="<?php echo $pathPrefix; ?>borrowing-transactions.php" class="nav-link flex items-center px-4 py-3 text-gray-300 hover:bg-gray-700 hover:text-white rounded-lg <?php echo (basename($_SERVER['PHP_SELF']) == 'borrowing-transactions.php') ? 'active' : ''; ?>">

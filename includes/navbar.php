@@ -34,7 +34,7 @@ $pageTitles = [
 ];
 
 $currentFile = basename($_SERVER['PHP_SELF']);
-$pageTitle = $pageTitles[$currentFile] ?? 'Warehouse Admin';
+$pageTitle = $pageTitles[$currentFile] ?? 'Admin Dashboard';
 ?>
 
 <!-- Top Navigation -->
