@@ -18,6 +18,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 $customer_id = $_SESSION['customer_id'];
+$employee_id = 1;
 $required_date = $_POST['required_date'] ?? '';
 $purpose = trim($_POST['purpose'] ?? '');
 $location_id = $_POST['location_id'] ?? null;
@@ -60,12 +61,13 @@ try {
     // Insert borrowing request
     $stmt = $pdo->prepare("
         INSERT INTO Borrowing_Request 
-        (customer_id, location_id, required_date, purpose, status, notes, request_date)
+        (customer_id, employee_id, location_id, required_date, purpose, status, notes, request_date)
         VALUES (?, ?, ?, ?, 'pending', ?, NOW())
     ");
     
     $stmt->execute([
         $customer_id,
+        $employee_id,
         $location_id ?: null,
         $required_datetime->format('Y-m-d H:i:s'),
         $purpose,
