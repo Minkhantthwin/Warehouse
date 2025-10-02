@@ -362,16 +362,45 @@ function createBorrowingRequest() {
 function updateBorrowingRequest() {
     global $pdo;
     
-    $data = json_decode(file_get_contents('php://input'), true);
+    $raw_input = file_get_contents('php://input');
+    error_log("Update request - Raw input: " . $raw_input);
+    
+    $data = json_decode($raw_input, true);
     
     if (!$data || empty($data['id'])) {
+        error_log("Update request - No data or ID provided");
         http_response_code(400);
         echo json_encode(['success' => false, 'message' => 'ID is required']);
         return;
     }
     
+    error_log("Update request - Data received: " . print_r($data, true));
+    
+    // Validate required fields
+    $required_fields = ['customer_id', 'employee_id', 'location_id', 'required_date', 'purpose'];
+    foreach ($required_fields as $field) {
+        if (empty($data[$field])) {
+            error_log("Update request - Missing required field: $field");
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => "Field '$field' is required"]);
+            return;
+        }
+    }
+    
     try {
         $pdo->beginTransaction();
+        
+        // First check if the request exists
+        $checkStmt = $pdo->prepare("SELECT id FROM Borrowing_Request WHERE id = ?");
+        $checkStmt->execute([$data['id']]);
+        
+        if (!$checkStmt->fetch()) {
+            $pdo->rollBack();
+            error_log("Update request - Request not found: " . $data['id']);
+            http_response_code(404);
+            echo json_encode(['success' => false, 'message' => 'Borrowing request not found']);
+            return;
+        }
         
         $query = "UPDATE Borrowing_Request SET 
                     customer_id = :customer_id, 
@@ -384,17 +413,64 @@ function updateBorrowingRequest() {
                   WHERE id = :id";
         
         $stmt = $pdo->prepare($query);
-        $stmt->execute([
+        $result = $stmt->execute([
             'id' => $data['id'],
             'customer_id' => $data['customer_id'],
             'employee_id' => $data['employee_id'],
             'location_id' => $data['location_id'],
             'required_date' => $data['required_date'],
             'purpose' => $data['purpose'],
-            'status' => $data['status'],
+            'status' => $data['status'] ?? 'pending',
             'notes' => $data['notes'] ?? null
         ]);
         
+        if (!$result) {
+            $pdo->rollBack();
+            error_log("Update request - Failed to update request " . $data['id']);
+            http_response_code(500);
+            echo json_encode(['success' => false, 'message' => 'Failed to update borrowing request']);
+            return;
+        }
+        
+        error_log("Update request - Successfully updated request " . $data['id']);
+
+        // Update items if provided (items are optional)
+        if (isset($data['items'])) {
+            error_log("Update request - Processing items for request " . $data['id']);
+            
+            // Delete existing items
+            $deleteStmt = $pdo->prepare("DELETE FROM Borrowing_Items WHERE borrowing_request_id = ?");
+            $deleteStmt->execute([$data['id']]);
+            $deletedItems = $deleteStmt->rowCount();
+            error_log("Update request - Deleted $deletedItems existing items");
+
+            // Insert updated items (only if array is not empty)
+            if (!empty($data['items']) && is_array($data['items'])) {
+                $itemQuery = "INSERT INTO Borrowing_Items (borrowing_request_id, item_type_id, item_description, quantity_requested, estimated_value) 
+                              VALUES (:request_id, :item_type_id, :item_description, :quantity_requested, :estimated_value)";
+                $itemStmt = $pdo->prepare($itemQuery);
+
+                $insertedItems = 0;
+                foreach ($data['items'] as $item) {
+                    if (!empty($item['item_description']) && !empty($item['quantity_requested'])) {
+                        $itemStmt->execute([
+                            'request_id' => $data['id'],
+                            'item_type_id' => $item['item_type_id'] ?: null,
+                            'item_description' => $item['item_description'],
+                            'quantity_requested' => (int)$item['quantity_requested'],
+                            'estimated_value' => (float)($item['estimated_value'] ?: 0)
+                        ]);
+                        $insertedItems++;
+                    }
+                }
+                error_log("Update request - Inserted $insertedItems new items");
+            } else {
+                error_log("Update request - No items to insert (empty array or not array)");
+            }
+        } else {
+            error_log("Update request - Items not provided in update data, keeping existing items");
+        }
+
         // Log activity
         logActivity($pdo, 'UPDATE', "Updated borrowing request ID: {$data['id']}");
         
@@ -405,8 +481,9 @@ function updateBorrowingRequest() {
     } catch (Exception $e) {
         $pdo->rollBack();
         error_log("Update borrowing request error: " . $e->getMessage());
+        error_log("Update borrowing request error trace: " . $e->getTraceAsString());
         http_response_code(500);
-        echo json_encode(['success' => false, 'message' => 'Failed to update borrowing request']);
+        echo json_encode(['success' => false, 'message' => 'Failed to update borrowing request: ' . $e->getMessage()]);
     }
 }
 
@@ -414,10 +491,16 @@ function deleteBorrowingRequest() {
     global $pdo;
     
     // Handle both POST form data and JSON data
-    $data = json_decode(file_get_contents('php://input'), true);
+    $raw_input = file_get_contents('php://input');
+    error_log("Delete request - Raw input: " . $raw_input);
+    
+    $data = json_decode($raw_input, true);
     $id = $data['id'] ?? $_POST['id'] ?? $_GET['id'] ?? '';
     
+    error_log("Delete request - ID extracted: " . $id);
+    
     if (!$id) {
+        error_log("Delete request - No ID provided");
         http_response_code(400);
         echo json_encode(['success' => false, 'message' => 'ID is required']);
         return;
@@ -426,18 +509,35 @@ function deleteBorrowingRequest() {
     try {
         $pdo->beginTransaction();
         
-        // Delete borrowing items first
-        $stmt = $pdo->prepare("DELETE FROM Borrowing_Items WHERE borrowing_request_id = ?");
-        $stmt->execute([$id]);
+        // First, check if the request exists
+        $checkStmt = $pdo->prepare("SELECT id FROM Borrowing_Request WHERE id = ?");
+        $checkStmt->execute([$id]);
         
-        // Delete borrowing request
-        $stmt = $pdo->prepare("DELETE FROM Borrowing_Request WHERE id = ?");
-        $stmt->execute([$id]);
-        
-        if ($stmt->rowCount() === 0) {
+        if (!$checkStmt->fetch()) {
             $pdo->rollBack();
+            error_log("Delete request - Request not found: " . $id);
             http_response_code(404);
             echo json_encode(['success' => false, 'message' => 'Borrowing request not found']);
+            return;
+        }
+        
+        // Delete borrowing items first (if any exist)
+        $itemStmt = $pdo->prepare("DELETE FROM Borrowing_Items WHERE borrowing_request_id = ?");
+        $itemStmt->execute([$id]);
+        $deletedItems = $itemStmt->rowCount();
+        error_log("Delete request - Deleted $deletedItems items for request $id");
+        
+        // Delete borrowing request
+        $requestStmt = $pdo->prepare("DELETE FROM Borrowing_Request WHERE id = ?");
+        $requestStmt->execute([$id]);
+        $deletedRequests = $requestStmt->rowCount();
+        error_log("Delete request - Deleted $deletedRequests request(s) with ID $id");
+        
+        if ($deletedRequests === 0) {
+            $pdo->rollBack();
+            error_log("Delete request - No rows affected when deleting request $id");
+            http_response_code(500);
+            echo json_encode(['success' => false, 'message' => 'Failed to delete borrowing request']);
             return;
         }
         
@@ -446,13 +546,15 @@ function deleteBorrowingRequest() {
         
         $pdo->commit();
         
+        error_log("Delete request - Successfully deleted request $id");
         echo json_encode(['success' => true, 'message' => 'Borrowing request deleted successfully']);
         
     } catch (Exception $e) {
         $pdo->rollBack();
         error_log("Delete borrowing request error: " . $e->getMessage());
+        error_log("Delete borrowing request error trace: " . $e->getTraceAsString());
         http_response_code(500);
-        echo json_encode(['success' => false, 'message' => 'Failed to delete borrowing request']);
+        echo json_encode(['success' => false, 'message' => 'Failed to delete borrowing request: ' . $e->getMessage()]);
     }
 }
 

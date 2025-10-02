@@ -141,7 +141,7 @@ if ($isLoggedIn) {
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
             <div class="text-center">
                 <h1 class="text-4xl md:text-6xl font-bold mb-6">
-                    Professional Equipment <br>
+                    Professional Warehouse <br>
                     <span class="text-yellow-300">Borrowing Service</span>
                 </h1>
                 <p class="text-xl md:text-2xl mb-8 text-blue-100">
@@ -149,7 +149,7 @@ if ($isLoggedIn) {
                 </p>
                 <?php if ($isLoggedIn): ?>
                     <button onclick="showBorrowRequest()" class="bg-yellow-500 text-blue-900 px-8 py-4 rounded-lg text-lg font-semibold hover:bg-yellow-400 transition-colors btn-pulse">
-                        <i class="fas fa-plus mr-2"></i> Request Equipment
+                        <i class="fas fa-plus mr-2"></i> Request Warehouse
                     </button>
                 <?php else: ?>
                     <button onclick="showRegister()" class="bg-yellow-500 text-blue-900 px-8 py-4 rounded-lg text-lg font-semibold hover:bg-yellow-400 transition-colors">
@@ -462,7 +462,7 @@ if ($isLoggedIn) {
     <div id="borrow-modal" class="modal">
         <div class="modal-content" style="max-width: 48rem;">
             <div class="flex justify-between items-center mb-6">
-                <h2 class="text-2xl font-bold text-gray-900">Equipment Borrowing Request</h2>
+                <h2 class="text-2xl font-bold text-gray-900">Renting Request</h2>
                 <button onclick="closeModal('borrow-modal')" class="text-gray-400 hover:text-gray-600">
                     <i class="fas fa-times text-xl"></i>
                 </button>
@@ -497,11 +497,11 @@ if ($isLoggedIn) {
                     </div>
                     
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Equipment Needed</label>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Equipment to Store</label>
                         <div id="items-container" class="space-y-3">
                             <div class="item-row grid grid-cols-1 md:grid-cols-3 gap-3 p-3 border border-gray-200 rounded-lg">
                                 <div>
-                                    <select name="items[0][type_id]" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-primary" required>
+                                    <select name="items[0][type_id]" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-primary">
                                         <option value="">Select Equipment Type</option>
                                         <?php foreach ($itemTypes as $itemType): ?>
                                         <option value="<?php echo $itemType['id']; ?>"><?php echo htmlspecialchars($itemType['name']); ?></option>
@@ -512,7 +512,7 @@ if ($isLoggedIn) {
                                     <input type="text" name="items[0][description]" placeholder="Specific description" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-primary">
                                 </div>
                                 <div class="flex items-center space-x-2">
-                                    <input type="number" name="items[0][quantity]" placeholder="Qty" min="1" value="1" class="w-20 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-primary" required>
+                                    <input type="number" name="items[0][quantity]" placeholder="Qty" min="1" value="1" class="w-20 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-primary">
                                     <button type="button" onclick="removeItem(this)" class="text-red-500 hover:text-red-700">
                                         <i class="fas fa-trash"></i>
                                     </button>
@@ -591,7 +591,7 @@ if ($isLoggedIn) {
             newItem.className = 'item-row grid grid-cols-1 md:grid-cols-3 gap-3 p-3 border border-gray-200 rounded-lg';
             newItem.innerHTML = `
                 <div>
-                    <select name="items[${itemCounter}][type_id]" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-primary" required>
+                    <select name="items[${itemCounter}][type_id]" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-primary">
                         <option value="">Select Equipment Type</option>
                         <?php foreach ($itemTypes as $itemType): ?>
                         <option value="<?php echo $itemType['id']; ?>"><?php echo htmlspecialchars($itemType['name']); ?></option>
@@ -602,7 +602,7 @@ if ($isLoggedIn) {
                     <input type="text" name="items[${itemCounter}][description]" placeholder="Specific description" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-primary">
                 </div>
                 <div class="flex items-center space-x-2">
-                    <input type="number" name="items[${itemCounter}][quantity]" placeholder="Qty" min="1" value="1" class="w-20 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-primary" required>
+                    <input type="number" name="items[${itemCounter}][quantity]" placeholder="Qty" min="1" value="1" class="w-20 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-primary">
                     <button type="button" onclick="removeItem(this)" class="text-red-500 hover:text-red-700">
                         <i class="fas fa-trash"></i>
                     </button>
@@ -614,11 +614,7 @@ if ($isLoggedIn) {
         
         function removeItem(button) {
             const itemRow = button.closest('.item-row');
-            if (document.querySelectorAll('.item-row').length > 1) {
-                itemRow.remove();
-            } else {
-                showNotification('At least one item is required', 'error');
-            }
+            itemRow.remove();
         }
         
         // Form handlers
