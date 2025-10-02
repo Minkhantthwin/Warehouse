@@ -37,7 +37,7 @@ if ($isLoggedIn) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Warehouse Solutions - Equipment Borrowing Service</title>
+    <title>Vault-X - Storage Management Service</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
@@ -109,7 +109,7 @@ if ($isLoggedIn) {
                 <div class="flex items-center">
                     <div class="flex-shrink-0">
                         <i class="fas fa-warehouse text-2xl text-primary mr-2"></i>
-                        <span class="text-xl font-bold text-gray-900">Warehouse Solutions</span>
+                        <span class="text-xl font-bold text-gray-900">Vault-X</span>
                     </div>
                 </div>
                 
@@ -141,15 +141,15 @@ if ($isLoggedIn) {
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
             <div class="text-center">
                 <h1 class="text-4xl md:text-6xl font-bold mb-6">
-                    Professional Warehouse <br>
-                    <span class="text-yellow-300">Borrowing Service</span>
+                    Storage to Storage<br>
+                    <span class="text-yellow-300">Management Service</span>
                 </h1>
                 <p class="text-xl md:text-2xl mb-8 text-blue-100">
-                    Access quality tools and equipment when you need them, without the upfront investment
+                    Access quality storage for your equipment and tools during your travels, without the upfront investment
                 </p>
                 <?php if ($isLoggedIn): ?>
                     <button onclick="showBorrowRequest()" class="bg-yellow-500 text-blue-900 px-8 py-4 rounded-lg text-lg font-semibold hover:bg-yellow-400 transition-colors btn-pulse">
-                        <i class="fas fa-plus mr-2"></i> Request Warehouse
+                        <i class="fas fa-plus mr-2"></i> Storage Request
                     </button>
                 <?php else: ?>
                     <button onclick="showRegister()" class="bg-yellow-500 text-blue-900 px-8 py-4 rounded-lg text-lg font-semibold hover:bg-yellow-400 transition-colors">
@@ -165,7 +165,7 @@ if ($isLoggedIn) {
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="text-center mb-16">
                 <h2 class="text-3xl font-bold text-gray-900 mb-4">Why Choose Our Service?</h2>
-                <p class="text-lg text-gray-600">Professional equipment borrowing made simple and reliable</p>
+                <p class="text-lg text-gray-600">Item storing made simple and reliable</p>
             </div>
             
             <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -173,8 +173,8 @@ if ($isLoggedIn) {
                     <div class="bg-blue-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4 feature-icon">
                         <i class="fas fa-tools text-2xl text-primary"></i>
                     </div>
-                    <h3 class="text-xl font-semibold text-gray-900 mb-2">Quality Equipment</h3>
-                    <p class="text-gray-600">Access to well-maintained, professional-grade tools and equipment</p>
+                    <h3 class="text-xl font-semibold text-gray-900 mb-2">Quality Storages</h3>
+                    <p class="text-gray-600">Access to well-maintained, professional-grade storages and rooms</p>
                 </div>
                 
                 <div class="text-center p-6">
@@ -182,7 +182,7 @@ if ($isLoggedIn) {
                         <i class="fas fa-clock text-2xl text-green-600"></i>
                     </div>
                     <h3 class="text-xl font-semibold text-gray-900 mb-2">Flexible Terms</h3>
-                    <p class="text-gray-600">Borrow for the exact duration you need, from days to months</p>
+                    <p class="text-gray-600">Store for the exact duration you need, from days to months</p>
                 </div>
                 
                 <div class="text-center p-6">
@@ -200,8 +200,8 @@ if ($isLoggedIn) {
     <section class="py-20 bg-gray-50">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="text-center mb-16">
-                <h2 class="text-3xl font-bold text-gray-900 mb-4">Available Equipment</h2>
-                <p class="text-lg text-gray-600">Browse our extensive catalog of professional equipment</p>
+                <h2 class="text-3xl font-bold text-gray-900 mb-4">Select Your Items</h2>
+                <p class="text-lg text-gray-600">That you want to store!</p>
             </div>
             
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -220,11 +220,11 @@ if ($isLoggedIn) {
                     <?php if ($isLoggedIn): ?>
                         <button onclick="requestItemType(<?php echo $itemType['id']; ?>, '<?php echo htmlspecialchars($itemType['name']); ?>')" 
                                 class="w-full bg-primary text-white py-2 rounded-lg hover:bg-secondary transition-colors">
-                            Request This Equipment
+                            Store this Item
                         </button>
                     <?php else: ?>
                         <button onclick="showLogin()" class="w-full bg-gray-200 text-gray-700 py-2 rounded-lg hover:bg-gray-300 transition-colors">
-                            Login to Request
+                            Login to Store your Item
                         </button>
                     <?php endif; ?>
                 </div>
@@ -239,7 +239,7 @@ if ($isLoggedIn) {
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="text-center mb-16">
                 <h2 class="text-3xl font-bold text-gray-900 mb-4">Your Recent Requests</h2>
-                <p class="text-lg text-gray-600">Track your borrowing requests and their status</p>
+                <p class="text-lg text-gray-600">Track your storage requests and their status</p>
             </div>
             
             <div class="bg-white rounded-lg shadow-md overflow-hidden">
@@ -302,9 +302,9 @@ if ($isLoggedIn) {
                 <div>
                     <div class="flex items-center mb-4">
                         <i class="fas fa-warehouse text-2xl text-primary mr-2"></i>
-                        <span class="text-xl font-bold">Warehouse Solutions</span>
+                        <span class="text-xl font-bold">Vault-X</span>
                     </div>
-                    <p class="text-gray-400">Professional equipment borrowing service for businesses of all sizes.</p>
+                    <p class="text-gray-400">Professional storage service for businesses of all sizes.</p>
                 </div>
                 
                 <div>
@@ -327,7 +327,7 @@ if ($isLoggedIn) {
             </div>
             
             <div class="border-t border-gray-800 mt-8 pt-8 text-center">
-                <p class="text-gray-400">&copy; 2024 Warehouse Solutions. All rights reserved.</p>
+                <p class="text-gray-400">&copy; 2025 Vault-X. All rights reserved.</p>
             </div>
         </div>
     </footer>
@@ -462,7 +462,7 @@ if ($isLoggedIn) {
     <div id="borrow-modal" class="modal">
         <div class="modal-content" style="max-width: 48rem;">
             <div class="flex justify-between items-center mb-6">
-                <h2 class="text-2xl font-bold text-gray-900">Renting Request</h2>
+                <h2 class="text-2xl font-bold text-gray-900">Storage Request</h2>
                 <button onclick="closeModal('borrow-modal')" class="text-gray-400 hover:text-gray-600">
                     <i class="fas fa-times text-xl"></i>
                 </button>
@@ -492,17 +492,17 @@ if ($isLoggedIn) {
                     </div>
                     
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Purpose *</label>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Description *</label>
                         <textarea name="purpose" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-primary" placeholder="Describe the purpose of borrowing..." required></textarea>
                     </div>
                     
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Equipment to Store</label>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Storing Items</label>
                         <div id="items-container" class="space-y-3">
                             <div class="item-row grid grid-cols-1 md:grid-cols-3 gap-3 p-3 border border-gray-200 rounded-lg">
                                 <div>
-                                    <select name="items[0][type_id]" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-primary">
-                                        <option value="">Select Equipment Type</option>
+                                    <select name="items[0][type_id]" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-primary" required>
+                                        <option value="">Select Available Item Type</option>
                                         <?php foreach ($itemTypes as $itemType): ?>
                                         <option value="<?php echo $itemType['id']; ?>"><?php echo htmlspecialchars($itemType['name']); ?></option>
                                         <?php endforeach; ?>
