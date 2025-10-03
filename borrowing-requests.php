@@ -176,7 +176,7 @@ $filterOptions = getFilterOptions($pdo);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Borrowing Requests - Warehouse Admin</title>
+    <title>Storage Requests - Warehouse Admin</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script>
@@ -343,7 +343,7 @@ $filterOptions = getFilterOptions($pdo);
             <!-- Requests Table -->
             <div class="bg-white rounded-lg shadow-md overflow-hidden">
                 <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-                    <h3 class="text-lg font-semibold text-gray-800">Borrowing Requests</h3>
+                    <h3 class="text-lg font-semibold text-gray-800">Storage Requests</h3>
                     <div class="flex items-center space-x-2">
                         <select onchange="handleBulkAction(this.value)" class="px-3 py-1 border border-gray-300 rounded text-sm">
                             <option value="">Bulk Actions</option>
@@ -493,7 +493,7 @@ $filterOptions = getFilterOptions($pdo);
         <div class="modal-overlay" onclick="closeModal('add-request-modal')"></div>
         <div class="modal-content max-w-4xl max-h-[90vh] overflow-y-auto">
             <div class="flex items-center justify-between mb-6">
-                <h3 class="text-lg font-semibold text-gray-800">Add New Borrowing Request</h3>
+                <h3 class="text-lg font-semibold text-gray-800">Add New Storage Request</h3>
                 <button onclick="closeModal('add-request-modal')" class="text-gray-400 hover:text-gray-600">
                     <i class="fas fa-times text-xl"></i>
                 </button>
@@ -601,7 +601,7 @@ $filterOptions = getFilterOptions($pdo);
         <div class="modal-overlay" onclick="closeModal('edit-request-modal')"></div>
         <div class="modal-content max-w-4xl max-h-[90vh] overflow-y-auto">
             <div class="flex items-center justify-between mb-6">
-                <h3 class="text-lg font-semibold text-gray-800">Edit Borrowing Request</h3>
+                <h3 class="text-lg font-semibold text-gray-800">Edit Storage Request</h3>
                 <button onclick="closeModal('edit-request-modal')" class="text-gray-400 hover:text-gray-600">
                     <i class="fas fa-times text-xl"></i>
                 </button>
@@ -702,7 +702,7 @@ $filterOptions = getFilterOptions($pdo);
         <div class="modal-overlay" onclick="closeModal('view-request-modal')"></div>
         <div class="modal-content max-w-4xl max-h-[90vh] overflow-y-auto">
             <div class="flex items-center justify-between mb-6">
-                <h3 class="text-lg font-semibold text-gray-800">Borrowing Request Details</h3>
+                <h3 class="text-lg font-semibold text-gray-800">Storage Request Details</h3>
                 <button onclick="closeModal('view-request-modal')" class="text-gray-400 hover:text-gray-600">
                     <i class="fas fa-times text-xl"></i>
                 </button>
@@ -867,7 +867,7 @@ $filterOptions = getFilterOptions($pdo);
         }
 
         async function approveRequest(id) {
-            if (!confirm('Are you sure you want to approve this borrowing request?')) {
+            if (!confirm('Are you sure you want to approve this request?')) {
                 return;
             }
 
@@ -947,7 +947,7 @@ $filterOptions = getFilterOptions($pdo);
         }
 
         async function deleteRequest(id) {
-            if (!confirm('Are you sure you want to delete this borrowing request? This action cannot be undone.')) {
+            if (!confirm('Are you sure you want to delete this request? This action cannot be undone.')) {
                 return;
             }
 
@@ -1011,7 +1011,7 @@ $filterOptions = getFilterOptions($pdo);
         }
 
         async function bulkDeleteRequests(requestIds) {
-            if (!confirm(`Are you sure you want to delete ${requestIds.length} borrowing requests? This action cannot be undone.`)) {
+            if (!confirm(`Are you sure you want to delete ${requestIds.length} requests? This action cannot be undone.`)) {
                 return;
             }
 
@@ -1182,7 +1182,7 @@ $filterOptions = getFilterOptions($pdo);
                 console.log('Response result:', result);
                 
                 if (result.success) {
-                    showNotification('Borrowing request created successfully!', 'success');
+                    showNotification('Storage request created successfully!', 'success');
                     closeModal('add-request-modal');
                     location.reload();
                 } else {

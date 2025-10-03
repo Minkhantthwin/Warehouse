@@ -58,8 +58,8 @@ try {
     // Insert borrowing request
     $stmt = $pdo->prepare("
         INSERT INTO Borrowing_Request 
-        (customer_id, location_id, required_date, purpose, status, notes, request_date)
-        VALUES (?, ?, ?, ?, 'pending', ?, NOW())
+        (customer_id, employee_id, location_id, required_date, purpose, status, notes, request_date)
+        VALUES (?, ?, ?, ?, ?, 'pending', ?, NOW())
     ");
     $stmt->execute([
         $customer_id,

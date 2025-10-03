@@ -230,7 +230,7 @@ $filterOptions = getFilterOptions($pdo);
                             <i class="fas fa-hand-holding text-green-600 text-xl"></i>
                         </div>
                         <div class="ml-4">
-                            <p class="text-sm font-medium text-gray-500">Borrow Transactions</p>
+                            <p class="text-sm font-medium text-gray-500"> Transactions</p>
                             <p class="text-2xl font-semibold text-gray-900"><?php echo number_format($stats['borrow_transactions']); ?></p>
                         </div>
                     </div>
@@ -334,7 +334,7 @@ $filterOptions = getFilterOptions($pdo);
             <!-- Transactions Table -->
             <div class="bg-white rounded-lg shadow-md overflow-hidden">
                 <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-                    <h3 class="text-lg font-semibold text-gray-800">Borrowing Transactions</h3>
+                    <h3 class="text-lg font-semibold text-gray-800"> Transactions</h3>
                     
                     <div class="flex items-center space-x-3">
                         <select onchange="handleBulkAction(this.value)" class="px-3 py-2 border border-gray-300 rounded-md">
@@ -492,7 +492,7 @@ $filterOptions = getFilterOptions($pdo);
         <div class="modal-overlay" onclick="closeModal('add-transaction-modal')"></div>
         <div class="modal-content max-w-2xl">
             <div class="flex items-center justify-between mb-6">
-                <h3 class="text-lg font-semibold text-gray-800">Add New Borrowing Transaction</h3>
+                <h3 class="text-lg font-semibold text-gray-800">Add New Transaction</h3>
                 <button onclick="closeModal('add-transaction-modal')" class="text-gray-400 hover:text-gray-600">
                     <i class="fas fa-times text-xl"></i>
                 </button>
@@ -501,9 +501,9 @@ $filterOptions = getFilterOptions($pdo);
             <form id="add-transaction-form">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                     <div class="md:col-span-2">
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Borrowing Request *</label>
+                        <label class="block text-sm font-medium text-gray-700 mb-2"> Request *</label>
                         <select name="borrowing_request_id" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                            <option value="">Select Borrowing Request</option>
+                            <option value="">Select Storage Request</option>
                             <?php foreach ($filterOptions['borrowing_requests'] as $request): ?>
                                 <option value="<?php echo $request['id']; ?>">
                                     Request #<?php echo $request['id']; ?> - <?php echo htmlspecialchars($request['customer_name']); ?> 
@@ -560,7 +560,7 @@ $filterOptions = getFilterOptions($pdo);
         <div class="modal-overlay" onclick="closeModal('edit-transaction-modal')"></div>
         <div class="modal-content max-w-2xl">
             <div class="flex items-center justify-between mb-6">
-                <h3 class="text-lg font-semibold text-gray-800">Edit Borrowing Transaction</h3>
+                <h3 class="text-lg font-semibold text-gray-800">Edit Transaction</h3>
                 <button onclick="closeModal('edit-transaction-modal')" class="text-gray-400 hover:text-gray-600">
                     <i class="fas fa-times text-xl"></i>
                 </button>

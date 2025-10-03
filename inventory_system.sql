@@ -185,12 +185,12 @@ INSERT INTO Location (name, address, city, state, zip_code, country) VALUES
 
 -- Insert sample borrowing item types
 INSERT INTO Borrowing_Item_Types (name, description, unit, estimated_value) VALUES
-('Construction Tools', 'General construction and building tools', 'pieces', 50.00),
-('Office Equipment', 'Office furniture and equipment', 'pieces', 200.00),
-('Safety Equipment', 'Personal protective equipment and safety gear', 'pieces', 25.00),
+('Bed Room', 'General construction and building tools', 'pieces', 50.00),
+('Boxes', 'Office furniture and equipment', 'pieces', 200.00),
+('Living Room', 'Personal protective equipment and safety gear', 'pieces', 25.00),
 ('Electronics', 'Electronic devices and equipment', 'pieces', 300.00),
-('Vehicle Equipment', 'Vehicle-related tools and equipment', 'pieces', 150.00),
-('Cleaning Supplies', 'Cleaning and maintenance supplies', 'sets', 30.00);
+('Office', 'Vehicle-related tools and equipment', 'pieces', 150.00),
+('Kitchen', 'Cleaning and maintenance supplies', 'sets', 30.00);
 
 -- Insert sample borrowing requests
 INSERT INTO Borrowing_Request (customer_id, employee_id, location_id, required_date, purpose, status, approved_by, approved_date, notes) VALUES

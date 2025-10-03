@@ -252,6 +252,7 @@ if ($isLoggedIn) {
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Items</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Required Date</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                             </tr>
                         </thead>
                         <tbody class="bg-white divide-y divide-gray-200">
@@ -284,6 +285,11 @@ if ($isLoggedIn) {
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                     <?php echo date('M j, Y', strtotime($request['required_date'])); ?>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm">
+                                    <a href="request-detail.php?id=<?php echo $request['id']; ?>" class="text-primary hover:text-secondary font-medium">
+                                        <i class="fas fa-eye mr-1"></i>View Details
+                                    </a>
                                 </td>
                             </tr>
                             <?php endforeach; ?>
@@ -592,7 +598,7 @@ if ($isLoggedIn) {
             newItem.innerHTML = `
                 <div>
                     <select name="items[${itemCounter}][type_id]" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-primary">
-                        <option value="">Select Equipment Type</option>
+                        <option value="">Select Item Type</option>
                         <?php foreach ($itemTypes as $itemType): ?>
                         <option value="<?php echo $itemType['id']; ?>"><?php echo htmlspecialchars($itemType['name']); ?></option>
                         <?php endforeach; ?>

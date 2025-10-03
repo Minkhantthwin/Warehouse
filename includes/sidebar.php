@@ -80,28 +80,32 @@ $currentAdmin = getLoggedInAdmin();
 
             <a href="<?php echo $pathPrefix; ?>borrowing-requests.php" class="nav-link flex items-center px-4 py-3 text-gray-300 hover:bg-gray-700 hover:text-white rounded-lg <?php echo (basename($_SERVER['PHP_SELF']) == 'borrowing-requests.php') ? 'active' : ''; ?>">
                 <i class="fas fa-clipboard-list mr-3"></i>
-                Borrowing Requests
+                Storage Requests
             </a>
-
+<!-- 
             <a href="<?php echo $pathPrefix; ?>borrowing-items.php" class="nav-link flex items-center px-4 py-3 text-gray-300 hover:bg-gray-700 hover:text-white rounded-lg <?php echo (basename($_SERVER['PHP_SELF']) == 'borrowing-items.php') ? 'active' : ''; ?>">
                 <i class="fas fa-boxes mr-3"></i>
                 Items
-            </a>
+            </a> -->
 
+            <a href="<?php echo $pathPrefix; ?>item-types.php" class="nav-link flex items-center px-4 py-3 text-gray-300 hover:bg-gray-700 hover:text-white rounded-lg <?php echo (basename($_SERVER['PHP_SELF']) == 'borrowing-items.php') ? 'active' : ''; ?>">
+                <i class="fas fa-box mr-3"></i>
+                Item-Types
+            </a>
             <a href="<?php echo $pathPrefix; ?>borrowing-transactions.php" class="nav-link flex items-center px-4 py-3 text-gray-300 hover:bg-gray-700 hover:text-white rounded-lg <?php echo (basename($_SERVER['PHP_SELF']) == 'borrowing-transactions.php') ? 'active' : ''; ?>">
                 <i class="fas fa-exchange-alt mr-3"></i>
-                Borrowing Transactions
+                Transactions
             </a>
 
-            <a href="<?php echo $pathPrefix; ?>reports.php" class="nav-link flex items-center px-4 py-3 text-gray-300 hover:bg-gray-700 hover:text-white rounded-lg <?php echo (basename($_SERVER['PHP_SELF']) == 'reports.php') ? 'active' : ''; ?>">
+            <!-- <a href="<?php echo $pathPrefix; ?>reports.php" class="nav-link flex items-center px-4 py-3 text-gray-300 hover:bg-gray-700 hover:text-white rounded-lg <?php echo (basename($_SERVER['PHP_SELF']) == 'reports.php') ? 'active' : ''; ?>">
                 <i class="fas fa-chart-bar mr-3"></i>
                 Reports
-            </a>
+            </a> -->
 
-            <a href="<?php echo $pathPrefix; ?>return-items.php" class="nav-link flex items-center px-4 py-3 text-gray-300 hover:bg-gray-700 hover:text-white rounded-lg <?php echo (basename($_SERVER['PHP_SELF']) == 'return-items.php') ? 'active' : ''; ?>">
+            <!-- <a href="<?php echo $pathPrefix; ?>return-items.php" class="nav-link flex items-center px-4 py-3 text-gray-300 hover:bg-gray-700 hover:text-white rounded-lg <?php echo (basename($_SERVER['PHP_SELF']) == 'return-items.php') ? 'active' : ''; ?>">
                 <i class="fas fa-undo mr-3"></i>
                 Return Items
-            </a>
+            </a> -->
             
             <!-- Logout Section -->
             <?php if ($currentAdmin): ?>
